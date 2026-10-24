@@ -37,6 +37,28 @@ const config = {
   trustProxy: process.env.TRUST_PROXY === "1",
 };
 validateProduction(config);
+config.emailTransport = { status: config.mailer ? "checking" : "unconfigured" };
+// A TLS/authentication handshake sends no email and exposes no provider secrets.
+async function checkEmailTransport() {
+  if (!config.mailer) return;
+  try {
+    await config.mailer.verify();
+    config.emailTransport = {
+      status: "connected",
+      checkedAt: new Date().toISOString(),
+    };
+    console.log("SMTP_CONNECTION_OK");
+  } catch {
+    config.emailTransport = {
+      status: "failed",
+      checkedAt: new Date().toISOString(),
+    };
+    console.error("SMTP_CONNECTION_FAILED");
+  }
+}
+void checkEmailTransport();
+const emailHealth = setInterval(checkEmailTransport, 300000);
+emailHealth.unref();
 const app = createApp(db, config);
 const cleanup = setInterval(
   () =>
@@ -63,6 +85,7 @@ for (const signal of ["SIGTERM", "SIGINT"])
   process.on(signal, () => {
     clearInterval(cleanup);
     clearInterval(mailWorker);
+    clearInterval(emailHealth);
     server.close(async () => {
       await client.close();
       process.exit(0);

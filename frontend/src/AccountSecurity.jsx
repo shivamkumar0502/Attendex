@@ -145,6 +145,20 @@ export default function AccountSecurity({ onBack, onSignedOut }) {
           <div className="insights-grid">
             <section className="card">
               <h3>{account.user.name}</h3>
+              <p className="hint" role="status">
+                Email service:{" "}
+                {
+                  {
+                    connected:
+                      "SMTP connection checked. Inbox delivery still needs confirmation.",
+                    failed:
+                      "SMTP connection failed. Ask your operator to check the Brevo credentials and sender settings.",
+                    checking: "Checking SMTP connection…",
+                    unconfigured: "Not configured.",
+                    unchecked: "Connection has not been checked.",
+                  }[account.emailTransport?.status || "unchecked"]
+                }
+              </p>
               <p>
                 Email:{" "}
                 {account.user.emailVerified ? "verified" : "not verified"}

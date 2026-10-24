@@ -118,6 +118,18 @@ test("an unverified account cannot claim configured administrator email privileg
   await request(f.app).get("/api/admin/readiness").expect(403);
   assert.equal((await request(f.app).get("/api/account")).body.isAdmin, false);
 });
+test("account exposes SMTP handshake status without provider credentials", async () => {
+  const f = fixture({ mailer: true });
+  f.config.emailTransport = {
+    status: "connected",
+    checkedAt: "2026-10-24T00:00:00.000Z",
+  };
+  const response = await request(f.app).get("/api/account").expect(200);
+  assert.equal(response.body.emailDelivery, true);
+  assert.deepEqual(response.body.emailTransport, f.config.emailTransport);
+  assert.equal(response.body.mailKey, undefined);
+  assert.equal(response.body.mailer, undefined);
+});
 test("verification tokens are hashed, single-use and expire; raw token only goes to the configured mailer", async () => {
   const f = fixture({ mailer: true });
   await request(f.app).post("/api/auth/email/request").send({}).expect(200);

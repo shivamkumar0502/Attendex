@@ -64,11 +64,22 @@ export function mailerFromEnv(env) {
       ? { user: env.SMTP_USER, pass: env.SMTP_PASSWORD }
       : undefined,
     connectionTimeout: 10000,
+    greetingTimeout: 10000,
     socketTimeout: 15000,
   });
   return {
-    send: ({ to, subject, text }) =>
-      transport.sendMail({ from: env.MAIL_FROM, to, subject, text }),
+    verify: () => transport.verify(),
+    send: async ({ to, subject, text }) => {
+      const result = await transport.sendMail({
+        from: env.MAIL_FROM,
+        to,
+        subject,
+        text,
+      });
+      if (result.rejected?.length || !result.accepted?.length)
+        throw Error("SMTP recipient was not accepted");
+      return result;
+    },
   };
 }
 export function readiness(config) {
@@ -204,6 +215,7 @@ export function securityRoutes(
             config.adminEmails?.includes(req.user.email)
           ),
           emailDelivery: !!(config.mailer && config.mailKey),
+          emailTransport: config.emailTransport || { status: "unchecked" },
           requireEmailVerification: !!config.strictProduction,
           requireTeacherApproval: !!config.requireTeacherApproval,
         }),

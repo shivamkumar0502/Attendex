@@ -6,6 +6,8 @@ Record the deployed commit, staging origin, tester, UTC timestamp, outcome and a
 
 ## Email activation
 
+The running server checks SMTP TLS/authentication at startup and every five minutes without sending a message. Account & Security displays the latest result; Refresh status retrieves it. `SMTP_CONNECTION_OK` means a handshake passed, not inbox delivery or sender-domain approval. Failures log only `SMTP_CONNECTION_FAILED`, without credentials or provider error payloads. Outgoing messages rejected by SMTP are retried by the existing mail worker.
+
 1. Verify the sender domain with the chosen SMTP provider, including its required SPF/DKIM and DMARC configuration.
 2. Set SMTP_HOST, SMTP_PORT (465 or 587), SMTP_USER, SMTP_PASSWORD, MAIL_FROM and APP_ORIGIN in the hosting secret settings. Preserve the existing encryption key. Do not commit a populated environment file.
 3. Run `node --env-file=.env.private scripts/check-mail.mjs`. This verifies TLS/authentication, not inbox delivery.
