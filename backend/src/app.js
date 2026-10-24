@@ -3,7 +3,7 @@ import { MongoRateStore, securityRoutes } from "./security.js";
 import { biometricRoutes } from "./biometrics.js";
 import express from "express";
 import helmet from "helmet";
-import { rateLimit } from "express-rate-limit";
+import { rateLimit, ipKeyGenerator } from "express-rate-limit";
 import {
   randomBytes,
   createHash,
@@ -88,7 +88,7 @@ export function createApp(db, config = {}) {
       skip: (req) => req.path === "/health",
       message: { error: "Too many requests. Please wait before trying again." },
       windowMs: 60000,
-      limit: 180,
+      limit: 1800,
       standardHeaders: "draft-8",
       legacyHeaders: false,
     }),
@@ -126,6 +126,12 @@ export function createApp(db, config = {}) {
       error: "Too many authentication attempts. Please try again later.",
     },
     windowMs: 15 * 60000,
+    keyGenerator: (req) =>
+      req.path +
+      ":" +
+      (typeof req.body?.email === "string"
+        ? hash(req.body.email.trim().toLowerCase())
+        : ipKeyGenerator(req.ip)),
     limit: 30,
     standardHeaders: "draft-8",
     legacyHeaders: false,
@@ -153,7 +159,8 @@ export function createApp(db, config = {}) {
         "Enter a valid email and a password of 10–128 characters.",
       );
     if (req.path === "/api/register") {
-      if(p.length<12) return fail(res,400,"Use at least 12 characters for a new password.");
+      if (p.length < 12)
+        return fail(res, 400, "Use at least 12 characters for a new password.");
       const name = text(req.body.name),
         role = req.body.role;
       if (!name || !["teacher", "student"].includes(role))
