@@ -12,7 +12,8 @@
     "build": "npm run build -w frontend",
     "start": "npm start -w backend",
     "test": "npm test -w backend",
-    "test:unit": "npm run test:unit -w backend"
+    "test:unit": "npm run test:unit -w backend",
+    "test:frontend": "npm test -w frontend"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

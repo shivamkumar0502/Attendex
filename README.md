@@ -35,6 +35,9 @@ Express serves `frontend/dist` and `/api` from one origin, so no separate fronte
 - Student check-ins remain pending until the owning teacher confirms attendance.
 - Teacher status editing, session closing, attendance history and CSV export.
 - Responsive green/lime landing page and React dashboards with mobile/tablet breakpoints.
+- Student first-login camera and microphone setup, also accessible from the dashboard. Checks can be skipped; only setup-completion and device-test flags are stored in MongoDB.
+- Teacher classroom camera with front/rear selection, photo capture, retake, delete and local download. Photos are reference material; capture does not mark attendance.
+- Student microphone recording/playback test with a 10-second limit. Photo/audio previews stay in the current tab and are discarded when leaving the setup screen; they are not uploaded or used for biometric identity matching.
 - Voice-assisted roll-call: browser speech synthesis reads names, speech recognition captures responses, and the teacher explicitly confirms each record. Speech support and microphone permissions depend on the browser; manual attendance always remains available.
 
 Voice capture is **transcription, not biometric speaker verification**. The browser's speech service may process audio remotely. No voiceprints or raw recordings are stored. Face recognition and biometric enrollment are not included. The landing-page workspace is an explicitly labeled preview; accounts start with empty classrooms.
@@ -42,6 +45,7 @@ Voice capture is **transcription, not biometric speaker verification**. The brow
 ## Structure
 
 - `frontend/src/main.jsx`: React application, authentication, classroom and record components.
+- `frontend/src/MediaSetup.jsx`: student device onboarding and teacher photo capture.
 - `frontend/src/VoiceRollCall.jsx`: microphone and speech lifecycle with cleanup on navigation.
 - `frontend/src/api.js`: API requests and CSV export.
 - `backend/src/app.js`: Express API and authorization.
@@ -55,6 +59,8 @@ This replaces the earlier Python/SQLite implementation. SQLite records are not a
 ```sh
 npm run build
 npm test
+npm run test:unit
+npm run test:frontend
 ```
 
 The integration suite starts an ephemeral **real MongoDB** using mongodb-memory-server. Its initial run requires a MongoDB binary download and an environment that permits running mongod. Tests cover teacher/student workflows, persistence across logins, restricted routes, duplicate check-ins, session closure, input validation and cross-origin rejection. CI runs these checks on Ubuntu. For restricted environments, `npm run test:unit` runs API validation/security tests without mongod.

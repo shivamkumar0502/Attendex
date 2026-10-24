@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { api, exportAttendance } from "./api.js";
 import VoiceRollCall from "./VoiceRollCall.jsx";
+import StudentSetup, { PhotoCapture } from "./MediaSetup.jsx";
 import "./style.css";
 function Brand() {
   return (
@@ -402,6 +403,7 @@ function Classroom({ classroom: c, user, mutate, refresh, notify, busy }) {
       ) : (
         <p>Your teacher will open attendance during class.</p>
       )}
+      {teacher && <PhotoCapture classroom />}
       {teacher && lesson && (
         <VoiceRollCall
           key={lesson.id}
@@ -507,7 +509,11 @@ function App() {
       setSelected((id) =>
         data.classes.some((c) => c.id === id) ? id : data.classes[0]?.id,
       );
-      setScreen("dashboard");
+      setScreen(
+        data.user.role === "student" && !data.user.setup?.completed
+          ? "setup"
+          : "dashboard",
+      );
     } catch (e) {
       if (e.status === 401) {
         setState(null);
@@ -571,6 +577,10 @@ function App() {
         onSuccess={refresh}
       />
     );
+  else if (screen === "setup" && state)
+    content = (
+      <StudentSetup user={state.user} onDone={refresh} onLogout={logout} />
+    );
   else if (state) {
     const u = state.user,
       teacher = u.role === "teacher",
@@ -626,6 +636,11 @@ function App() {
             <div className="row">
               <span className="avatar">{u.name[0]}</span>
               <span>{u.name}</span>
+              {!teacher && (
+                <button className="ghost" onClick={() => setScreen("setup")}>
+                  Camera & mic setup
+                </button>
+              )}
               <button className="ghost" onClick={logout}>
                 Sign out
               </button>

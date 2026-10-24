@@ -13,7 +13,16 @@ import { fileURLToPath } from "node:url";
 const scrypt = promisify(scryptCallback),
   id = () => randomBytes(12).toString("hex"),
   hash = (s) => createHash("sha256").update(s).digest("hex");
-const publicUser = (u) => ({ id: u._id, name: u.name, role: u.role });
+const publicUser = (u) => ({
+  id: u._id,
+  name: u.name,
+  role: u.role,
+  setup: {
+    completed: !!u.setup?.completed,
+    cameraTested: !!u.setup?.cameraTested,
+    micTested: !!u.setup?.micTested,
+  },
+});
 const text = (v, max = 100) =>
   typeof v === "string" && v.trim().length <= max ? v.trim() : "";
 const validId = (v) => typeof v === "string" && /^[a-f0-9]{24}$/.test(v);
@@ -32,7 +41,11 @@ export function createApp(db, config = {}) {
     attendance = db.collection("attendance");
   app.disable("x-powered-by");
   if (config.trustProxy) app.set("trust proxy", 1);
-  app.use(helmet());
+  app.use(
+    helmet({
+      contentSecurityPolicy: { directives: { mediaSrc: ["'self'", "blob:"] } },
+    }),
+  );
   app.use(express.json({ limit: "16kb" }));
   app.use(
     "/api",
@@ -126,6 +139,23 @@ export function createApp(db, config = {}) {
     req.user = user;
     req.sessionToken = hash(token);
     next();
+  });
+  app.post("/api/setup", async (req, res) => {
+    if (req.user.role !== "student")
+      return fail(res, 403, "Student access required");
+    if (
+      typeof req.body.cameraTested !== "boolean" ||
+      typeof req.body.micTested !== "boolean"
+    )
+      return fail(res, 400, "Device checks must be boolean values");
+    const setup = {
+      completed: true,
+      cameraTested: req.body.cameraTested,
+      micTested: req.body.micTested,
+      updated: new Date(),
+    };
+    await users.updateOne({ _id: req.user._id }, { $set: { setup } });
+    res.json({ ok: true });
   });
   app.post("/api/logout", async (req, res) => {
     await sessions.deleteOne({ token: req.sessionToken });
