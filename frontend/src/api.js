@@ -1,19 +1,35 @@
 export async function api(path, data) {
-  const response = await fetch("/api/" + path, {
-    method: data === undefined ? "GET" : "POST",
-    headers: data === undefined ? {} : { "Content-Type": "application/json" },
-    body: data === undefined ? undefined : JSON.stringify(data),
-    credentials: "same-origin",
-  });
-  const payload = await response
-    .json()
-    .catch(() => ({ error: "Unable to reach the API" }));
-  if (!response.ok) {
-    const error = new Error(payload.error || "Request failed");
-    error.status = response.status;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 25000);
+  try {
+    const response = await fetch("/api/" + path, {
+      method: data === undefined ? "GET" : "POST",
+      headers: data === undefined ? {} : { "Content-Type": "application/json" },
+      body: data === undefined ? undefined : JSON.stringify(data),
+      credentials: "same-origin",
+      signal: controller.signal,
+    });
+    const payload = await response
+      .json()
+      .catch(() => ({ error: "Unable to reach the API" }));
+    if (!response.ok) {
+      const error = new Error(payload.error || "Request failed");
+      error.status = response.status;
+      throw error;
+    }
+    return payload;
+  } catch (error) {
+    if (controller.signal.aborted || error instanceof TypeError) {
+      const message =
+        path === "register"
+          ? "The server did not respond. Your account may already have been created; try signing in before registering again."
+          : "The server is taking too long or your connection was interrupted. Please try again shortly.";
+      throw new Error(message);
+    }
     throw error;
+  } finally {
+    clearTimeout(timer);
   }
-  return payload;
 }
 export function exportAttendance(classroom, user) {
   const rows = [["Class", "Session", "Student", "Status"]];

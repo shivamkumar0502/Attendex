@@ -158,6 +158,7 @@ export function createApp(db, config = {}) {
         400,
         "Enter a valid email and a password of 10–128 characters.",
       );
+    let user;
     if (req.path === "/api/register") {
       if (p.length < 12)
         return fail(res, 400, "Use at least 12 characters for a new password.");
@@ -165,7 +166,7 @@ export function createApp(db, config = {}) {
         role = req.body.role;
       if (!name || !["teacher", "student"].includes(role))
         return fail(res, 400, "Enter your name and role.");
-      await users.insertOne({
+      user = {
         _id: id(),
         name,
         email,
@@ -173,16 +174,18 @@ export function createApp(db, config = {}) {
         role,
         teacherApproved: false,
         createdAt: new Date(),
-      });
-    }
-    const user = await users.findOne({ email });
+      };
+      await users.insertOne(user);
+    } else user = await users.findOne({ email });
     if (!user) {
       await password(p, "00000000000000000000000000000000");
       return fail(res, 401, "Invalid email or password");
     }
-    const candidate = await password(p, user.password.split(":")[0]);
-    if (!timingSafeEqual(Buffer.from(candidate), Buffer.from(user.password)))
-      return fail(res, 401, "Invalid email or password");
+    if (req.path !== "/api/register") {
+      const candidate = await password(p, user.password.split(":")[0]);
+      if (!timingSafeEqual(Buffer.from(candidate), Buffer.from(user.password)))
+        return fail(res, 401, "Invalid email or password");
+    }
     const token = randomBytes(32).toString("base64url");
     await sessions.insertOne({
       token: hash(token),

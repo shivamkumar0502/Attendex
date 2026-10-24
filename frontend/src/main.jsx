@@ -34,17 +34,30 @@ function Empty({ title, children }) {
 }
 function Auth({ register, onToggle, onBack, onSuccess, onRecovery }) {
   const [error, setError] = useState(""),
-    [busy, setBusy] = useState(false);
+    [busy, setBusy] = useState(false),
+    [slow, setSlow] = useState(false);
+  useEffect(() => {
+    if (!busy) {
+      setSlow(false);
+      return;
+    }
+    const timer = setTimeout(() => setSlow(true), 8000);
+    return () => clearTimeout(timer);
+  }, [busy]);
   async function submit(e) {
     e.preventDefault();
     setBusy(true);
     setError("");
+    const form = Object.fromEntries(new FormData(e.currentTarget));
     try {
-      await api(
-        register ? "register" : "login",
-        Object.fromEntries(new FormData(e.currentTarget)),
-      );
-      await onSuccess();
+      await api(register ? "register" : "login", form);
+      try {
+        await onSuccess();
+      } catch {
+        setError(
+          "You are signed in, but the workspace could not load. Refresh the page; you do not need to register again.",
+        );
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -102,6 +115,12 @@ function Auth({ register, onToggle, onBack, onSuccess, onRecovery }) {
         <button className="full" disabled={busy}>
           {busy ? "Please wait…" : register ? "Create account ↗" : "Sign in ↗"}
         </button>
+        {slow && (
+          <p role="status">
+            The server is responding slowly. Free hosting may need time to wake
+            up. Please keep this page open.
+          </p>
+        )}
         <p role="alert">{error}</p>
       </form>
       <button className="textbtn" onClick={onRecovery}>

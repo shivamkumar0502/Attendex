@@ -2,14 +2,19 @@ import { MongoClient } from "mongodb";
 export async function connectDatabase(uri, name) {
   const client = new MongoClient(uri, {
     serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
+    socketTimeoutMS: 15000,
+    waitQueueTimeoutMS: 5000,
     maxPoolSize: 20,
   });
   try {
     await client.connect();
     const db = client.db(name);
     await Promise.all([
-      db.collection("mailJobs").createIndex({expires:1},{expireAfterSeconds:0}),
-      db.collection("mailJobs").createIndex({status:1,nextAttempt:1}),
+      db
+        .collection("mailJobs")
+        .createIndex({ expires: 1 }, { expireAfterSeconds: 0 }),
+      db.collection("mailJobs").createIndex({ status: 1, nextAttempt: 1 }),
       db
         .collection("rateLimits")
         .createIndex({ resetAt: 1 }, { expireAfterSeconds: 0 }),
