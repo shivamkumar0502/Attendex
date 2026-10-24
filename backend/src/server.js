@@ -14,6 +14,7 @@ const { client, db } = await connectDatabase(
 );
 const app = createApp(db, {
   origin: process.env.APP_ORIGIN,
+  biometricKey: process.env.BIOMETRIC_KEY,
   secureCookies: process.env.COOKIE_SECURE === "1",
   trustProxy: process.env.TRUST_PROXY === "1",
 });

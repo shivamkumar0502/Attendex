@@ -1,7 +1,14 @@
+import BiometricPanel from "./BiometricPanel.jsx";
 import React, { useEffect, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
 import { api, exportAttendance } from "./api.js";
 import VoiceRollCall from "./VoiceRollCall.jsx";
+import Marketing from "./Marketing.jsx";
+import {
+  Insights,
+  ShareClass,
+  StudentDirectory,
+  DemoWorkspace,
+} from "./WorkspaceExtras.jsx";
 import StudentSetup, { PhotoCapture } from "./MediaSetup.jsx";
 import "./style.css";
 function Brand() {
@@ -20,103 +27,6 @@ function Empty({ title, children }) {
       </span>
       <h3>{title}</h3>
       <p>{children}</p>
-    </div>
-  );
-}
-function Landing({ onAuth }) {
-  return (
-    <div className="landing">
-      <nav className="row between">
-        <Brand />
-        <small>BUILT AROUND YOUR CLASSROOM</small>
-        <button onClick={() => onAuth(false)}>Sign in ↗</button>
-      </nav>
-      <section className="hero">
-        <div>
-          <span className="pill">Less admin. More learning.</span>
-          <h1>
-            Every student.
-            <br />
-            Every class.
-            <br />
-            <em>Accounted for.</em>
-          </h1>
-          <p>
-            A calmer way to manage attendance. Bring classes, voice-assisted
-            roll-call and student check-ins together in one thoughtful
-            workspace.
-          </p>
-          <div className="row">
-            <button onClick={() => onAuth(true)}>
-              Meet your new classroom ↗
-            </button>
-            <button className="ghost" onClick={() => onAuth(false)}>
-              I'm a student
-            </button>
-          </div>
-          <p className="hint">
-            For schools, colleges, and the people who teach.
-          </p>
-        </div>
-        <div className="preview">
-          <span className="pill" style={{ color: "#203d36" }}>
-            WORKSPACE PREVIEW
-          </span>
-          <h2>Good morning, Professor.</h2>
-          <p>A little less roll-call. A little more possibility.</p>
-          <div className="mini">
-            <div className="row between">
-              <h3>Introduction to AI</h3>
-              <span className="tag">Live session</span>
-            </div>
-            <small>Computer Science · Section A</small>
-            {["Aarav Sharma", "Ananya Singh", "Kabir Patel"].map((name, i) => (
-              <div className="person" key={name}>
-                <span className="avatar">
-                  {name
-                    .split(" ")
-                    .map((n) => n[0])
-                    .join("")}
-                </span>
-                <span style={{ flex: 1 }}>{name}</span>
-                <span className={"tag " + (i === 2 ? "pending" : "")}>
-                  {i === 2 ? "In review" : "Present"}
-                </span>
-              </div>
-            ))}
-            <div className="voice">
-              <span className="wave">▂ ▅ ▃ ▇ ▅ ▂</span>
-              <p>Voice-assisted. Teacher confirmed.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-      <section className="features">
-        {[
-          [
-            "01 / CONNECT",
-            "One class, one place.",
-            "Create a class, share its code, and welcome your students.",
-          ],
-          [
-            "02 / CHECK IN",
-            "A familiar voice.",
-            "Read names aloud and capture spoken responses during roll-call.",
-          ],
-          [
-            "03 / UNDERSTAND",
-            "Records with clarity.",
-            "Review check-ins, confirm attendance and export your class records.",
-          ],
-        ].map(([n, title, body]) => (
-          <article className="card" key={n}>
-            <small>{n}</small>
-            <b>{title}</b>
-            <p>{body}</p>
-          </article>
-        ))}
-      </section>
-      <footer>Attendex · More time for what matters.</footer>
     </div>
   );
 }
@@ -201,7 +111,7 @@ function Auth({ register, onToggle, onBack, onSuccess }) {
     </section>
   );
 }
-function ClassModal({ teacher, onClose, onSave }) {
+function ClassModal({ teacher, onClose, onSave, initialCode = "" }) {
   const ref = useRef(null),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
@@ -276,7 +186,13 @@ function ClassModal({ teacher, onClose, onSave }) {
           ) : (
             <>
               <label htmlFor="code">Class code</label>
-              <input id="code" name="code" required maxLength={20} />
+              <input
+                id="code"
+                name="code"
+                required
+                maxLength={20}
+                defaultValue={initialCode}
+              />
             </>
           )}
           <button className="full" disabled={busy}>
@@ -403,6 +319,12 @@ function Classroom({ classroom: c, user, mutate, refresh, notify, busy }) {
       ) : (
         <p>Your teacher will open attendance during class.</p>
       )}
+      {!teacher && (
+        <details className="identity-details">
+          <summary>Face & voice enrollment / comparison</summary>
+          <BiometricPanel />
+        </details>
+      )}
       {teacher && <PhotoCapture classroom />}
       {teacher && lesson && (
         <VoiceRollCall
@@ -429,7 +351,30 @@ function Classroom({ classroom: c, user, mutate, refresh, notify, busy }) {
                   <tbody>
                     {c.students.map((s) => (
                       <tr key={s.id}>
-                        <td>{s.name}</td>
+                        <td>
+                          {s.name}
+                          <div className="evidence-tags">
+                            {Object.entries(
+                              c.attendance.find(
+                                (a) =>
+                                  a.lesson === lesson.id && a.student === s.id,
+                              )?.evidence || {},
+                            ).map(([kind, value]) => (
+                              <span
+                                key={kind}
+                                className={
+                                  "tag " +
+                                  (value.result === "match" ? "" : "pending")
+                                }
+                              >
+                                {kind}:{" "}
+                                {value.result === "match"
+                                  ? "model match"
+                                  : "review"}
+                              </span>
+                            ))}
+                          </div>
+                        </td>
                         <td>
                           <select
                             disabled={busy}
@@ -487,7 +432,7 @@ function Classroom({ classroom: c, user, mutate, refresh, notify, busy }) {
     </>
   );
 }
-function App() {
+export function App() {
   const [state, setState] = useState(null),
     [screen, setScreen] = useState("loading"),
     [register, setRegister] = useState(false),
@@ -497,6 +442,10 @@ function App() {
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
   const timer = useRef();
+  const [shareClass, setShareClass] = useState(null);
+  const [inviteCode, setInviteCode] = useState(
+    () => new URLSearchParams(window.location.search).get("join") || "",
+  );
   function notify(s) {
     setMessage(s);
     clearTimeout(timer.current);
@@ -506,6 +455,12 @@ function App() {
     try {
       const data = await api("state");
       setState(data);
+      if (
+        inviteCode &&
+        data.user.role === "student" &&
+        data.user.setup?.completed
+      )
+        setModal(true);
       setSelected((id) =>
         data.classes.some((c) => c.id === id) ? id : data.classes[0]?.id,
       );
@@ -558,9 +513,16 @@ function App() {
         <button onClick={refresh}>Try again</button>
       </div>
     );
+  else if (screen === "demo")
+    content = (
+      <DemoWorkspace
+        onClose={() => setScreen(state ? "dashboard" : "landing")}
+      />
+    );
   else if (screen === "landing")
     content = (
-      <Landing
+      <Marketing
+        onDemo={() => setScreen("demo")}
         onAuth={(r) => {
           setRegister(r);
           setScreen("auth");
@@ -610,6 +572,7 @@ function App() {
               ["overview", "◫", "Overview"],
               ["classes", "▦", "My classes"],
               ["records", "↗", "Attendance records"],
+              ...(teacher ? [["students", "◉", "Students"]] : []),
             ].map(([id, icon, label]) => (
               <button
                 key={id}
@@ -641,6 +604,9 @@ function App() {
                   Camera & mic setup
                 </button>
               )}
+              <button className="textbtn" onClick={() => setScreen("demo")}>
+                Explore demo
+              </button>
               <button className="ghost" onClick={logout}>
                 Sign out
               </button>
@@ -681,6 +647,7 @@ function App() {
               </div>
             ))}
           </section>
+          {teacher && view === "overview" && <Insights classes={classes} />}
           <div className="workspace">
             <section>
               <div className="row between">
@@ -709,14 +676,9 @@ function App() {
                     {teacher && (
                       <button
                         className="textbtn"
-                        onClick={() =>
-                          navigator.clipboard
-                            .writeText(cl.code)
-                            .then(() => notify("Class code copied"))
-                            .catch(() => notify(`Class code: ${cl.code}`))
-                        }
+                        onClick={() => setShareClass(cl)}
                       >
-                        Copy class code
+                        Share invitation / QR ↗
                       </button>
                     )}
                   </article>
@@ -731,7 +693,9 @@ function App() {
             </section>
             <section className="card">
               {c ? (
-                view === "records" ? (
+                view === "students" && teacher ? (
+                  <StudentDirectory classroom={c} />
+                ) : view === "records" ? (
                   <History classroom={c} user={u} />
                 ) : (
                   <Classroom
@@ -756,12 +720,25 @@ function App() {
             remain unmarked.
           </footer>
         </main>
+        {shareClass && (
+          <ShareClass
+            classroom={shareClass}
+            onClose={() => setShareClass(null)}
+          />
+        )}
         {modal && (
           <ClassModal
             teacher={teacher}
-            onClose={() => setModal(false)}
+            initialCode={inviteCode}
+            onClose={() => {
+              setModal(false);
+              setInviteCode("");
+              window.history.replaceState(null, "", window.location.pathname);
+            }}
             onSave={async (data) => {
               await api(teacher ? "classes" : "join", data);
+              setInviteCode("");
+              window.history.replaceState(null, "", window.location.pathname);
               await refresh();
             }}
           />
@@ -780,4 +757,3 @@ function App() {
     </>
   );
 }
-createRoot(document.getElementById("root")).render(<App />);

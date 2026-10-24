@@ -1,17 +1,7 @@
+import { mediaError } from "./mediaError.js";
+import BiometricPanel from "./BiometricPanel.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
-export function mediaError(error) {
-  if (["NotAllowedError", "SecurityError"].includes(error?.name))
-    return "Permission denied. Allow camera/microphone access in your browser site settings, then try again.";
-  if (error?.name === "NotFoundError")
-    return "No compatible camera or microphone was found. Connect a device or continue without it.";
-  if (error?.name === "NotReadableError")
-    return "This device is busy. Close other camera/microphone apps and try again.";
-  return (
-    error?.message ||
-    "Unable to access this device. Try another browser or use manual attendance."
-  );
-}
 export function PhotoCapture({ classroom = false, onCaptured = () => {} }) {
   const video = useRef(null),
     stream = useRef(null),
@@ -402,6 +392,7 @@ export default function StudentSetup({ user, onDone, onLogout }) {
         <PhotoCapture onCaptured={() => setCamera(true)} />
         <MicrophoneCheck onTested={() => setMic(true)} />
       </div>
+      <BiometricPanel />
       <div className="card row between">
         <p>
           Only your setup completion and device-check flags are saved to your

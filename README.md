@@ -1,70 +1,82 @@
 # Attendex
 
-Responsive attendance management built with **React + Vite**, **Node.js + Express**, and **MongoDB**.
+**A classroom attendance workspace built with React, Express and MongoDB.**
 
-## Start locally
+[Live app](https://attendex-y32a.onrender.com) · [Product case study](docs/CASE_STUDY.md) · [Model sources](docs/MODELS.md)
 
-Use Node.js 22+ and MongoDB 7+ (local MongoDB or an Atlas connection string).
+## Product experience
+
+- A complete responsive product landing page with an interactive recruiter demo; the demo uses labeled sample data, requires no account and never writes to the API.
+- Teacher/student authentication, class creation, QR invitation links and authenticated student enrollment.
+- Live sessions, student check-ins, teacher-reviewed attendance, CSV export, searchable student directory and classroom insights. Missing records stay unmarked.
+- Student camera/microphone onboarding, local photo capture, audio recording/playback and teacher classroom photos.
+- Optional **experimental 1:1 face and voice comparison**: opt-in enrollment of 2–3 samples, fresh-sample comparison against the student's own account, AES-256-GCM encrypted templates and self-service deletion. Browser-derived comparison signals can accompany a student check-in for teacher review.
+
+## Run locally
+
+Node.js 22+, MongoDB 7+ (local MongoDB or Atlas), and internet access for the first model asset download.
 
 ```sh
 npm ci
+npm run prepare:models
 cp .env.example .env
-# Edit .env and set MONGODB_URI.
+# Set MONGODB_URI in .env. For experimental comparisons, set BIOMETRIC_KEY.
 npm run dev
 ```
 
-React runs at http://localhost:5173; Vite proxies `/api` to Express on port 8000. Keep the browser on port 5173 during development. Never put MongoDB credentials in frontend files or VITE_ variables.
+Open http://localhost:5173. Vite proxies `/api` to Express on port 8000. To generate a biometric encryption key locally:
 
-For MongoDB Atlas, use its database connection string as `MONGODB_URI`, create a database user, and allow the backend host in the Atlas network access list. `MONGODB_DB` defaults to `attendex`. The server connects and creates indexes before accepting requests, and exits with an error if the database is unavailable.
+```sh
+node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+```
 
-## Build and serve
+Put that value in `BIOMETRIC_KEY` in your private `.env` or hosting secret settings, never in source control or frontend variables. Keep the key stable and backed up securely: changing or losing it makes saved templates unreadable. Without a valid key, enrollment and comparison are disabled; manual attendance remains available.
+
+For Atlas, configure a database user and network access for your backend host. Never put MongoDB credentials into a `VITE_` variable. `MONGODB_DB` defaults to `attendex`.
+
+## Build and deploy
 
 ```sh
 npm run build
 npm start
 ```
 
-Express serves `frontend/dist` and `/api` from one origin, so no separate frontend API configuration is needed. Set `NODE_ENV=production`, `APP_ORIGIN=https://your-domain.example`, and `COOKIE_SECURE=1` behind HTTPS. Set `TRUST_PROXY=1` only when behind one trusted reverse proxy. Use `npm ci` (including dev dependencies) during the build stage; Vite is a build dependency.
+The build copies face and WASM runtime assets and downloads a pinned, SHA-256-verified voice model. Generated model assets are excluded from Git. Express serves React and the API from a single origin. Voice weights are about 84 MB and loaded only when a user invokes voice comparison. Inference runs on the user's browser, not the Render CPU.
 
-## Features
+Production settings: `NODE_ENV=production`, `APP_ORIGIN=https://your-domain.example`, `COOKIE_SECURE=1`, `MONGODB_URI`, and optional `BIOMETRIC_KEY`. Set `TRUST_PROXY=1` only behind one trusted proxy. Render's start command sets `APP_ORIGIN` from its documented `RENDER_EXTERNAL_URL`. The Node service binds `0.0.0.0` and uses `PORT`.
 
-- Teacher and student signup/login, salted scrypt passwords and hashed server-side session tokens.
-- MongoDB-backed sessions with expiration and TTL cleanup; HttpOnly, SameSite cookies.
-- Class creation, unique join codes and idempotent student enrollment.
-- One active attendance session per class, enforced by a database unique index.
-- Student check-ins remain pending until the owning teacher confirms attendance.
-- Teacher status editing, session closing, attendance history and CSV export.
-- Responsive green/lime landing page and React dashboards with mobile/tablet breakpoints.
-- Student first-login camera and microphone setup, also accessible from the dashboard. Checks can be skipped; only setup-completion and device-test flags are stored in MongoDB.
-- Teacher classroom camera with front/rear selection, photo capture, retake, delete and local download. Photos are reference material; capture does not mark attendance.
-- Student microphone recording/playback test with a 10-second limit. Photo/audio previews stay in the current tab and are discarded when leaving the setup screen; they are not uploaded or used for biometric identity matching.
-- Voice-assisted roll-call: browser speech synthesis reads names, speech recognition captures responses, and the teacher explicitly confirms each record. Speech support and microphone permissions depend on the browser; manual attendance always remains available.
+## How comparison works—and its limits
 
-Voice capture is **transcription, not biometric speaker verification**. The browser's speech service may process audio remotely. No voiceprints or raw recordings are stored. Face recognition and biometric enrollment are not included. The landing-page workspace is an explicitly labeled preview; accounts start with empty classrooms.
+Face: face-api tiny detector + tiny landmarks + 128-dimensional recognition descriptors. Voice: SpeechBrain-derived ECAPA-TDNN ONNX model with SpeechBrain-compatible 16 kHz filterbank preprocessing and 192-dimensional embeddings. No age, gender or emotion classifiers are enabled.
 
-## Structure
+Raw enrollment photos/audio stay in the browser. Descriptors are sent over HTTPS and encrypted in MongoDB. Templates are not returned to teachers or other students. Comparison is only against the authenticated student's own enrollment; there is no classroom-wide face search. Recent comparison summaries (not templates) can be attached to a pending check-in for five minutes.
 
-- `frontend/src/main.jsx`: React application, authentication, classroom and record components.
-- `frontend/src/MediaSetup.jsx`: student device onboarding and teacher photo capture.
-- `frontend/src/VoiceRollCall.jsx`: microphone and speech lifecycle with cleanup on navigation.
-- `frontend/src/api.js`: API requests and CSV export.
-- `backend/src/app.js`: Express API and authorization.
-- `backend/src/db.js`: MongoDB connection pool and indexes.
-- `backend/src/server.js`: configuration, startup and graceful shutdown.
+**This is a research/prototype signal, not a trusted identity or authentication factor.** Browser-provided descriptors can be forged. Photo/video/audio replay, liveness and voice-clone defenses are not implemented. Thresholds (face Euclidean distance 0.5; voice cosine similarity 0.65) are starting values, not calibrated school-specific operating points. No measured real-world false-accept/false-reject rate or biometric accuracy is claimed. Enrollment is self-service and is not a teacher-witnessed identity ceremony. Teachers retain final attendance review and manual check-in remains available. Do not market it as a fraud-proof or production-certified biometric attendance product.
 
-This replaces the earlier Python/SQLite implementation. SQLite records are not automatically imported. Existing Python login sessions do not carry over.
+Browser voice **roll-call** is a separate feature: it transcribes responses using the browser speech service, which may process microphone audio externally. ECAPA voice comparison does not transcribe or verify the spoken phrase.
 
 ## Verification
 
 ```sh
 npm run build
-npm test
 npm run test:unit
 npm run test:frontend
+npm run test:models
+npm test
 ```
 
-The integration suite starts an ephemeral **real MongoDB** using mongodb-memory-server. Its initial run requires a MongoDB binary download and an environment that permits running mongod. Tests cover teacher/student workflows, persistence across logins, restricted routes, duplicate check-ins, session closure, input validation and cross-origin rejection. CI runs these checks on Ubuntu. For restricted environments, `npm run test:unit` runs API validation/security tests without mongod.
+- Unit/component suites cover authorization, encrypted templates/tamper detection, consent/deletion, invalid descriptors, camera/microphone cleanup, QR invitations, demo interactions and metric definitions.
+- `test:models` performs real ONNX inference on synthetic input to verify the tensor contract and finite outputs. It is **not** a speaker accuracy benchmark.
+- Audio preprocessing was checked against an independent NumPy FFT reference (maximum absolute feature error approximately 0.000021 on the test waveform).
+- `npm test` starts a real ephemeral MongoDB via mongodb-memory-server. It requires an environment that permits running mongod; alternatively set `TEST_MONGODB_URI` for an isolated test database. CI runs on Ubuntu. Restricted sandbox environments may block mongod.
+- Physical-device camera/microphone behavior and same/different-person recognition must still be tested with consenting participants on target browsers.
 
-## Deployment scope
+## Architecture
 
-MongoDB holds application data, so application filesystem persistence is unnecessary. Multiple API processes can share database-backed sessions and connection pools. Rate limits currently use per-process memory; use a shared rate-limit store before horizontal scaling. Teacher signup is self-service: institution invitations/approval, organization isolation, password recovery, email verification, audit logs, retention controls and backups remain necessary before a school-wide production rollout. State responses currently load all of a user's class history; add pagination for large historical datasets.
+`frontend/src/Marketing.jsx` and `WorkspaceExtras.jsx` implement the product site, offline demo, invitations, directory and insights. `MediaSetup.jsx` manages device tests. `BiometricPanel.jsx` handles opt-in enrollment/comparison while `biometrics.js` lazy-loads models and extracts embeddings. `backend/src/app.js` authorizes attendance workflows; `backend/src/biometrics.js` validates, encrypts and compares templates; `db.js` creates MongoDB indexes.
+
+Sessions use random hashed tokens, expiration/TTL cleanup, HttpOnly/SameSite cookies and salted scrypt passwords. A unique partial MongoDB index enforces one active session per class; attendance has a unique session/student index. Student check-ins cannot directly mark themselves present. The earlier Python/SQLite version is removed; old SQLite records and sessions are not automatically imported.
+
+## Before an institutional rollout
+
+The current product is a portfolio/pilot MVP. Teacher registration is self-service; institution provisioning/approval, organization isolation, email verification/password recovery, audit trails, retention/consent administration and backups remain necessary. Rate limits use per-process memory; use a shared store before horizontal scaling. History responses need pagination for large datasets. Insights use the current class roster across closed sessions, so changing enrollment can affect historical rates. No real customer counts, commercial adoption or business outcomes are asserted.

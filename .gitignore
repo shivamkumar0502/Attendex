@@ -6,3 +6,5 @@ frontend/dist/
 data/
 __pycache__/
 coverage/
+frontend/public/models/
+frontend/public/ort/

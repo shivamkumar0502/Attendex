@@ -9,11 +9,13 @@
   ],
   "scripts": {
     "dev": "concurrently -k \"npm run dev -w backend\" \"npm run dev -w frontend\"",
-    "build": "npm run build -w frontend",
+    "build": "node scripts/prepare-models.mjs && npm run build -w frontend",
     "start": "npm start -w backend",
     "test": "npm test -w backend",
     "test:unit": "npm run test:unit -w backend",
-    "test:frontend": "npm test -w frontend"
+    "test:frontend": "npm test -w frontend",
+    "prepare:models": "node scripts/prepare-models.mjs",
+    "test:models": "node scripts/check-voice-model.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

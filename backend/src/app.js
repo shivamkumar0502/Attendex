@@ -1,3 +1,4 @@
+import { biometricRoutes } from "./biometrics.js";
 import express from "express";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
@@ -43,7 +44,13 @@ export function createApp(db, config = {}) {
   if (config.trustProxy) app.set("trust proxy", 1);
   app.use(
     helmet({
-      contentSecurityPolicy: { directives: { mediaSrc: ["'self'", "blob:"] } },
+      contentSecurityPolicy: {
+        directives: {
+          mediaSrc: ["'self'", "blob:"],
+          scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
+          workerSrc: ["'self'", "blob:"],
+        },
+      },
     }),
   );
   app.use(express.json({ limit: "16kb" }));
@@ -140,6 +147,7 @@ export function createApp(db, config = {}) {
     req.sessionToken = hash(token);
     next();
   });
+  biometricRoutes(app, { users, key: config.biometricKey });
   app.post("/api/setup", async (req, res) => {
     if (req.user.role !== "student")
       return fail(res, 403, "Student access required");
@@ -171,7 +179,10 @@ export function createApp(db, config = {}) {
       enrolled.map(async (cl) => {
         const roster = teacher
           ? await users
-              .find({ _id: { $in: cl.members } }, { projection: { name: 1 } })
+              .find(
+                { _id: { $in: cl.members } },
+                { projection: { name: 1, "setup.completed": 1 } },
+              )
               .toArray()
           : [];
         const history = await lessons
@@ -190,7 +201,11 @@ export function createApp(db, config = {}) {
           section: cl.section,
           code: teacher ? cl.code : undefined,
           studentCount: cl.members.length,
-          students: roster.map((s) => ({ id: s._id, name: s.name })),
+          students: roster.map((s) => ({
+            id: s._id,
+            name: s.name,
+            setupCompleted: !!s.setup?.completed,
+          })),
           lessons: history.map((l) => ({
             id: l._id,
             created: l.created,
@@ -200,6 +215,7 @@ export function createApp(db, config = {}) {
             lesson: a.lesson,
             student: a.student,
             status: a.status,
+            evidence: a.evidence || {},
           })),
         };
       }),
@@ -286,6 +302,14 @@ export function createApp(db, config = {}) {
       );
     else
       await attendance.insertOne({
+        evidence: Object.fromEntries(
+          Object.entries(req.user.biometricSignals || {}).filter(
+            ([kind, value]) =>
+              ["face", "voice"].includes(kind) &&
+              value.at &&
+              Date.now() - new Date(value.at).getTime() < 300000,
+          ),
+        ),
         lesson: lesson._id,
         student,
         status,

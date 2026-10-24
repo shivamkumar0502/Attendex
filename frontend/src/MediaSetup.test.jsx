@@ -11,6 +11,7 @@ import {
 import "@testing-library/jest-dom/vitest";
 import StudentSetup, { PhotoCapture, MicrophoneCheck } from "./MediaSetup.jsx";
 import { api } from "./api.js";
+vi.mock("./BiometricPanel.jsx", () => ({ default: () => null }));
 vi.mock("./api.js", () => ({ api: vi.fn() }));
 let stop, getUserMedia;
 beforeEach(() => {
