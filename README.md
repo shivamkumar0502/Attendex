@@ -1,38 +1,64 @@
 # Attendex
 
-A responsive classroom attendance application with a forest-green and lime interface. Built for students and teachers, with persistent server-side records rather than local-storage mock data.
+Responsive attendance management built with **React + Vite**, **Node.js + Express**, and **MongoDB**.
 
-## Run
+## Start locally
 
-Python 3.11+; no third-party packages required.
-
-```sh
-python server.py
-```
-
-Open http://localhost:8000. Create a teacher account and a student account (use separate browser profiles), create a class, copy its code, and join as the student. The teacher starts a session; students submit check-ins for review. Teachers mark present, late, or absent, close sessions, and export CSV records. Unmarked students are never silently marked absent.
+Use Node.js 22+ and MongoDB 7+ (local MongoDB or an Atlas connection string).
 
 ```sh
-python -m unittest -v test_app.py
-node --check public/app.js
+npm ci
+cp .env.example .env
+# Edit .env and set MONGODB_URI.
+npm run dev
 ```
 
-## Voice assistance
+React runs at http://localhost:5173; Vite proxies `/api` to Express on port 8000. Keep the browser on port 5173 during development. Never put MongoDB credentials in frontend files or VITE_ variables.
 
-The browser reads student names aloud using speech synthesis and captures spoken responses using its SpeechRecognition implementation where available. Teachers review each response before explicitly confirming attendance. This is speech transcription, **not biometric speaker verification**. Manual attendance works without microphone permission or speech support. Browser speech services may send audio to their provider; inform users before enabling the microphone. HTTPS is needed outside localhost.
+For MongoDB Atlas, use its database connection string as `MONGODB_URI`, create a database user, and allow the backend host in the Atlas network access list. `MONGODB_DB` defaults to `attendex`. The server connects and creates indexes before accepting requests, and exits with an error if the database is unavailable.
 
-Face recognition, biometric enrollment and speaker identity matching are not implemented. No images, voiceprints or raw recordings are stored. The landing-page illustration is explicitly a workspace preview; authenticated dashboards start empty.
+## Build and serve
 
-## Configuration
+```sh
+npm run build
+npm start
+```
 
-- `PORT`: HTTP port, default 8000.
-- `DATABASE_PATH`: SQLite database file, default `data/attendex.db`.
-- `COOKIE_SECURE=1`: set behind HTTPS in deployment.
+Express serves `frontend/dist` and `/api` from one origin, so no separate frontend API configuration is needed. Set `NODE_ENV=production`, `APP_ORIGIN=https://your-domain.example`, and `COOKIE_SECURE=1` behind HTTPS. Set `TRUST_PROXY=1` only when behind one trusted reverse proxy. Use `npm ci` (including dev dependencies) during the build stage; Vite is a build dependency.
 
-Passwords use salted scrypt. Sessions use random tokens, hashed at rest, HttpOnly/SameSite cookies and 24-hour expiration. Every attendance mutation checks class ownership or enrolled student membership. Student check-ins always remain pending until teacher approval. CSV cells are escaped to reduce spreadsheet formula injection.
+## Features
 
-## Deployment and scale
+- Teacher and student signup/login, salted scrypt passwords and hashed server-side session tokens.
+- MongoDB-backed sessions with expiration and TTL cleanup; HttpOnly, SameSite cookies.
+- Class creation, unique join codes and idempotent student enrollment.
+- One active attendance session per class, enforced by a database unique index.
+- Student check-ins remain pending until the owning teacher confirms attendance.
+- Teacher status editing, session closing, attendance history and CSV export.
+- Responsive green/lime landing page and React dashboards with mobile/tablet breakpoints.
+- Voice-assisted roll-call: browser speech synthesis reads names, speech recognition captures responses, and the teacher explicitly confirms each record. Speech support and microphone permissions depend on the browser; manual attendance always remains available.
 
-Run `python server.py` behind an HTTPS reverse proxy. Attach persistent storage for the database and schedule backups; ephemeral hosts otherwise lose records on restart. SQLite and Python's built-in HTTP server are a **single-instance MVP**, not a production school-wide deployment. Mobile/tablet layouts adapt at 700px and 1050px.
+Voice capture is **transcription, not biometric speaker verification**. The browser's speech service may process audio remotely. No voiceprints or raw recordings are stored. Face recognition and biometric enrollment are not included. The landing-page workspace is an explicitly labeled preview; accounts start with empty classrooms.
 
-Before institutional deployment, migrate to a production application server and PostgreSQL, add organization/institution isolation and teacher invitation approval, rate limiting, email verification/reset, audit logs, retention controls and monitoring. Teacher registration is self-service for this MVP. Do not expose it as an institution-authorized identity system without provisioning controls. There is no AI identity model or accuracy claim.
+## Structure
+
+- `frontend/src/main.jsx`: React application, authentication, classroom and record components.
+- `frontend/src/VoiceRollCall.jsx`: microphone and speech lifecycle with cleanup on navigation.
+- `frontend/src/api.js`: API requests and CSV export.
+- `backend/src/app.js`: Express API and authorization.
+- `backend/src/db.js`: MongoDB connection pool and indexes.
+- `backend/src/server.js`: configuration, startup and graceful shutdown.
+
+This replaces the earlier Python/SQLite implementation. SQLite records are not automatically imported. Existing Python login sessions do not carry over.
+
+## Verification
+
+```sh
+npm run build
+npm test
+```
+
+The integration suite starts an ephemeral **real MongoDB** using mongodb-memory-server. Its initial run requires a MongoDB binary download and an environment that permits running mongod. Tests cover teacher/student workflows, persistence across logins, restricted routes, duplicate check-ins, session closure, input validation and cross-origin rejection. CI runs these checks on Ubuntu. For restricted environments, `npm run test:unit` runs API validation/security tests without mongod.
+
+## Deployment scope
+
+MongoDB holds application data, so application filesystem persistence is unnecessary. Multiple API processes can share database-backed sessions and connection pools. Rate limits currently use per-process memory; use a shared rate-limit store before horizontal scaling. Teacher signup is self-service: institution invitations/approval, organization isolation, password recovery, email verification, audit logs, retention controls and backups remain necessary before a school-wide production rollout. State responses currently load all of a user's class history; add pagination for large historical datasets.
