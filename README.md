@@ -1,0 +1,3 @@
+# Attendex
+
+Classroom attendance application.
