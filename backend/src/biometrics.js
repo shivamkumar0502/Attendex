@@ -61,8 +61,8 @@ export function compare(vector, samples, kind) {
     model: models[kind],
   };
 }
-export function biometricRoutes(app, { users, key }) {
-  const enabled = /^[a-f0-9]{64}$/i.test(key || "");
+export function biometricRoutes(app, { users, key, strictProduction = false }) {
+  const enabled = !strictProduction && /^[a-f0-9]{64}$/i.test(key || "");
   app.get("/api/biometrics", async (req, res) =>
     res.json({
       enabled,

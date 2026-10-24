@@ -1,3 +1,5 @@
+import { trustedFaceRoutes } from "./trusted-face.js";
+import { MongoRateStore, securityRoutes } from "./security.js";
 import { biometricRoutes } from "./biometrics.js";
 import express from "express";
 import helmet from "helmet";
@@ -18,6 +20,8 @@ const publicUser = (u) => ({
   id: u._id,
   name: u.name,
   role: u.role,
+  emailVerified: !!u.emailVerified,
+  teacherApproved: !!u.teacherApproved,
   setup: {
     completed: !!u.setup?.completed,
     cameraTested: !!u.setup?.cameraTested,
@@ -47,7 +51,28 @@ export function createApp(db, config = {}) {
       contentSecurityPolicy: {
         directives: {
           mediaSrc: ["'self'", "blob:"],
-          scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
+          scriptSrc: [
+            "'self'",
+            "'wasm-unsafe-eval'",
+            ...(config.faceProvider
+              ? ["https://cdn.liveness.rekognition.amazonaws.com"]
+              : []),
+          ],
+          connectSrc: [
+            "'self'",
+            ...(config.faceProvider
+              ? [
+                  "https://rekognition." +
+                    config.faceProvider.region +
+                    ".amazonaws.com",
+                  "wss://streaming-rekognition." +
+                    config.faceProvider.region +
+                    ".amazonaws.com",
+                  "https://cdn.liveness.rekognition.amazonaws.com",
+                ]
+              : []),
+          ],
+          imgSrc: ["'self'", "data:", "blob:"],
           workerSrc: ["'self'", "blob:"],
         },
       },
@@ -57,6 +82,11 @@ export function createApp(db, config = {}) {
   app.use(
     "/api",
     rateLimit({
+      ...(config.distributedLimits
+        ? { store: new MongoRateStore(db.collection("rateLimits"), "api") }
+        : {}),
+      skip: (req) => req.path === "/health",
+      message: { error: "Too many requests. Please wait before trying again." },
       windowMs: 60000,
       limit: 180,
       standardHeaders: "draft-8",
@@ -78,15 +108,35 @@ export function createApp(db, config = {}) {
     }
     next();
   });
+  let healthPromise,
+    healthUntil = 0;
   app.get("/api/health", async (req, res) => {
-    await db.command({ ping: 1 });
+    if (!healthPromise || Date.now() >= healthUntil) {
+      healthPromise = db.command({ ping: 1 });
+      healthUntil = Date.now() + 1000;
+    }
+    await healthPromise;
     res.json({ ok: true });
   });
   const authLimiter = rateLimit({
+    ...(config.distributedLimits
+      ? { store: new MongoRateStore(db.collection("rateLimits"), "auth") }
+      : {}),
+    message: {
+      error: "Too many authentication attempts. Please try again later.",
+    },
     windowMs: 15 * 60000,
     limit: 30,
     standardHeaders: "draft-8",
     legacyHeaders: false,
+  });
+  app.use("/api/auth", authLimiter);
+  const security = securityRoutes(app, {
+    db,
+    config,
+    cookieOptions,
+    password,
+    publicUser,
   });
   app.post(["/api/register", "/api/login"], authLimiter, async (req, res) => {
     const email = text(req.body.email, 254).toLowerCase(),
@@ -103,6 +153,7 @@ export function createApp(db, config = {}) {
         "Enter a valid email and a password of 10–128 characters.",
       );
     if (req.path === "/api/register") {
+      if(p.length<12) return fail(res,400,"Use at least 12 characters for a new password.");
       const name = text(req.body.name),
         role = req.body.role;
       if (!name || !["teacher", "student"].includes(role))
@@ -113,10 +164,15 @@ export function createApp(db, config = {}) {
         email,
         password: await password(p),
         role,
+        teacherApproved: false,
+        createdAt: new Date(),
       });
     }
     const user = await users.findOne({ email });
-    if (!user) return fail(res, 401, "Invalid email or password");
+    if (!user) {
+      await password(p, "00000000000000000000000000000000");
+      return fail(res, 401, "Invalid email or password");
+    }
     const candidate = await password(p, user.password.split(":")[0]);
     if (!timingSafeEqual(Buffer.from(candidate), Buffer.from(user.password)))
       return fail(res, 401, "Invalid email or password");
@@ -147,7 +203,59 @@ export function createApp(db, config = {}) {
     req.sessionToken = hash(token);
     next();
   });
-  biometricRoutes(app, { users, key: config.biometricKey });
+  app.use("/api", (req, res, next) => {
+    if (config.auditEnabled && req.method !== "GET")
+      res.on("finish", () => {
+        db.collection("audit")
+          .insertOne({
+            actor: req.user._id,
+            role: req.user.role,
+            action: req.path,
+            method: req.method,
+            status: res.statusCode,
+            at: new Date(),
+            expires: new Date(Date.now() + 365 * 86400000),
+          })
+          .catch(() => console.error("AUDIT_WRITE_FAILED"));
+      });
+    if (
+      req.method !== "GET" &&
+      !req.path.startsWith("/auth/") &&
+      !req.path.startsWith("/admin/") &&
+      req.path !== "/logout"
+    ) {
+      if (config.strictProduction && !req.user.emailVerified)
+        return fail(res, 403, "Verify your email before using this feature.");
+      if (
+        config.requireTeacherApproval &&
+        req.user.role === "teacher" &&
+        !req.user.teacherApproved &&
+        !(
+          req.user.emailVerified && config.adminEmails?.includes(req.user.email)
+        )
+      )
+        return fail(
+          res,
+          403,
+          "Your teacher account needs administrator approval.",
+        );
+    }
+    next();
+  });
+  security.protectedRoutes();
+  trustedFaceRoutes(app, {
+    db,
+    provider: config.faceProvider,
+    transaction: config.transaction,
+    rateStore: config.distributedLimits
+      ? new MongoRateStore(db.collection("rateLimits"), "managed-face")
+      : undefined,
+  });
+  biometricRoutes(app, {
+    users,
+    key: config.biometricKey,
+    strictProduction: config.strictProduction,
+  });
   app.post("/api/setup", async (req, res) => {
     if (req.user.role !== "student")
       return fail(res, 403, "Student access required");
@@ -188,6 +296,7 @@ export function createApp(db, config = {}) {
         const history = await lessons
           .find({ classId: cl._id })
           .sort({ created: -1, _id: -1 })
+          .limit(100)
           .toArray();
         const records = await attendance
           .find({
@@ -206,6 +315,7 @@ export function createApp(db, config = {}) {
             name: s.name,
             setupCompleted: !!s.setup?.completed,
           })),
+          historyLimited: history.length === 100,
           lessons: history.map((l) => ({
             id: l._id,
             created: l.created,
@@ -337,6 +447,10 @@ export function createApp(db, config = {}) {
       return fail(res, 413, "Request too large");
     if (err instanceof SyntaxError || err instanceof TypeError)
       return fail(res, 400, "Invalid request");
+    if (err.code === "LIMIT_FILE_SIZE" || err.code === "LIMIT_FILE_COUNT")
+      return fail(res, 413, "Photo upload is too large.");
+    if (err.status && err.status >= 400 && err.status < 500)
+      return fail(res, err.status, err.message);
     console.error("Request failed:", err.name);
     return fail(res, 500, "Server error");
   });

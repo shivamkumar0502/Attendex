@@ -8,6 +8,30 @@ export async function connectDatabase(uri, name) {
     await client.connect();
     const db = client.db(name);
     await Promise.all([
+      db.collection("mailJobs").createIndex({expires:1},{expireAfterSeconds:0}),
+      db.collection("mailJobs").createIndex({status:1,nextAttempt:1}),
+      db
+        .collection("rateLimits")
+        .createIndex({ resetAt: 1 }, { expireAfterSeconds: 0 }),
+      db
+        .collection("accountTokens")
+        .createIndex({ token: 1 }, { unique: true }),
+      db
+        .collection("accountTokens")
+        .createIndex({ expires: 1 }, { expireAfterSeconds: 0 }),
+      db.collection("audit").createIndex({ actor: 1, at: -1 }),
+      db
+        .collection("audit")
+        .createIndex({ expires: 1 }, { expireAfterSeconds: 0 }),
+      db
+        .collection("livenessSessions")
+        .createIndex({ expires: 1 }, { expireAfterSeconds: 0 }),
+      db
+        .collection("faceEnrollments")
+        .createIndex({ classId: 1, student: 1 }, { unique: true }),
+      db
+        .collection("photoProposals")
+        .createIndex({ expires: 1 }, { expireAfterSeconds: 0 }),
       db.collection("users").createIndex({ email: 1 }, { unique: true }),
       db.collection("sessions").createIndex({ token: 1 }, { unique: true }),
       db

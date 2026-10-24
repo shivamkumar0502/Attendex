@@ -4,6 +4,8 @@
 
 [Live app](https://attendex-y32a.onrender.com) · [Product case study](docs/CASE_STUDY.md) · [Model sources](docs/MODELS.md)
 
+**Release status: hardened pilot; full institutional production activation remains blocked.** See [production status and required acceptance](docs/PRODUCTION.md) and [recovery operations](docs/operations/RECOVERY.md). This release adds email/recovery, teacher approval, Mongo-backed rate limits, audit activity and an optional AWS liveness/group-photo review integration; provider activation and real-world acceptance have not been completed.
+
 ## Product experience
 
 - A complete responsive product landing page with an interactive recruiter demo; the demo uses labeled sample data, requires no account and never writes to the API.
@@ -79,4 +81,4 @@ Sessions use random hashed tokens, expiration/TTL cleanup, HttpOnly/SameSite coo
 
 ## Before an institutional rollout
 
-The current product is a portfolio/pilot MVP. Teacher registration is self-service; institution provisioning/approval, organization isolation, email verification/password recovery, audit trails, retention/consent administration and backups remain necessary. Rate limits use per-process memory; use a shared store before horizontal scaling. History responses need pagination for large datasets. Insights use the current class roster across closed sessions, so changing enrollment can affect historical rates. No real customer counts, commercial adoption or business outcomes are asserted.
+The current product is a portfolio/pilot MVP. Teacher registration remains self-service in pilot unless approval is enabled. Production requires verified email and approval by a verified configured administrator. MongoDB-backed rate limits and activity logs are enabled in the hosted server; history responses are bounded to 100 sessions and exports state that limit. This is a single-institution deployment, not delegated multi-institution SaaS. Privacy/consent administration, managed backups, transactional integration tests and operational acceptance remain necessary. Insights use the current class roster across closed sessions, so changing enrollment can affect historical rates. No real customer counts, commercial adoption or business outcomes are asserted.

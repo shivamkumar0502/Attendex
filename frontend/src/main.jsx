@@ -1,3 +1,5 @@
+import AccountSecurity, { Recovery } from "./AccountSecurity.jsx";
+import { TrustedFaceEnrollment, GroupPhotoReview } from "./TrustedFace.jsx";
 import BiometricPanel from "./BiometricPanel.jsx";
 import React, { useEffect, useRef, useState } from "react";
 import { api, exportAttendance } from "./api.js";
@@ -30,7 +32,7 @@ function Empty({ title, children }) {
     </div>
   );
 }
-function Auth({ register, onToggle, onBack, onSuccess }) {
+function Auth({ register, onToggle, onBack, onSuccess, onRecovery }) {
   const [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   async function submit(e) {
@@ -90,16 +92,21 @@ function Auth({ register, onToggle, onBack, onSuccess }) {
           name="password"
           type="password"
           required
-          minLength={10}
+          minLength={register ? 12 : 10}
           maxLength={128}
           autoComplete={register ? "new-password" : "current-password"}
         />
-        <small>At least 10 characters</small>
+        <small>
+          {register ? "At least 12 characters" : "Your account password"}
+        </small>
         <button className="full" disabled={busy}>
           {busy ? "Please wait…" : register ? "Create account ↗" : "Sign in ↗"}
         </button>
         <p role="alert">{error}</p>
       </form>
+      <button className="textbtn" onClick={onRecovery}>
+        Forgot password?
+      </button>
       <button className="textbtn" onClick={onToggle}>
         {register
           ? "Already have an account? Sign in"
@@ -214,6 +221,12 @@ function History({ classroom: c, user }) {
           Export CSV ↓
         </button>
       </div>
+      {c.historyLimited && (
+        <p className="hint">
+          Showing the latest 100 sessions. CSV exports on this screen include
+          only the visible history.
+        </p>
+      )}
       {c.lessons.length ? (
         <div className="roster">
           <table>
@@ -326,6 +339,10 @@ function Classroom({ classroom: c, user, mutate, refresh, notify, busy }) {
         </details>
       )}
       {teacher && <PhotoCapture classroom />}
+      {teacher && (
+        <GroupPhotoReview classroom={c} lesson={lesson} onRefresh={refresh} />
+      )}
+      {!teacher && <TrustedFaceEnrollment classroom={c} />}
       {teacher && lesson && (
         <VoiceRollCall
           key={lesson.id}
@@ -434,7 +451,12 @@ function Classroom({ classroom: c, user, mutate, refresh, notify, busy }) {
 }
 export function App() {
   const [state, setState] = useState(null),
-    [screen, setScreen] = useState("loading"),
+    [screen, setScreen] = useState(() =>
+      window.location.hash.startsWith("#reset=") ||
+      window.location.hash.startsWith("#verify=")
+        ? "recovery"
+        : "loading",
+    ),
     [register, setRegister] = useState(false),
     [selected, setSelected] = useState(null),
     [view, setView] = useState("overview"),
@@ -442,6 +464,17 @@ export function App() {
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
   const timer = useRef();
+  const [recovery, setRecovery] = useState(() => {
+    const params = new URLSearchParams(window.location.hash.slice(1));
+    return {
+      action: params.has("verify")
+        ? "verify"
+        : params.has("reset")
+          ? "reset"
+          : "request",
+      token: params.get("verify") || params.get("reset") || "",
+    };
+  });
   const [shareClass, setShareClass] = useState(null);
   const [inviteCode, setInviteCode] = useState(
     () => new URLSearchParams(window.location.search).get("join") || "",
@@ -480,7 +513,11 @@ export function App() {
     }
   }
   useEffect(() => {
-    refresh();
+    if (
+      !window.location.hash.startsWith("#reset=") &&
+      !window.location.hash.startsWith("#verify=")
+    )
+      refresh();
     return () => clearTimeout(timer.current);
   }, []);
   async function mutate(path, data) {
@@ -505,6 +542,26 @@ export function App() {
   }
   let content;
   if (screen === "loading") content = <Empty title="Opening your workspace…" />;
+  else if (screen === "recovery")
+    content = (
+      <Recovery
+        {...recovery}
+        onBack={() => {
+          window.history.replaceState(null, "", window.location.pathname);
+          setScreen("landing");
+        }}
+      />
+    );
+  else if (screen === "account")
+    content = (
+      <AccountSecurity
+        onBack={refresh}
+        onSignedOut={() => {
+          setState(null);
+          setScreen("landing");
+        }}
+      />
+    );
   else if (screen === "error")
     content = (
       <div className="auth">
@@ -536,6 +593,10 @@ export function App() {
         register={register}
         onToggle={() => setRegister((r) => !r)}
         onBack={() => setScreen("landing")}
+        onRecovery={() => {
+          setRecovery({ action: "request", token: "" });
+          setScreen("recovery");
+        }}
         onSuccess={refresh}
       />
     );
@@ -604,6 +665,9 @@ export function App() {
                   Camera & mic setup
                 </button>
               )}
+              <button className="ghost" onClick={() => setScreen("account")}>
+                Account & security
+              </button>
               <button className="textbtn" onClick={() => setScreen("demo")}>
                 Explore demo
               </button>

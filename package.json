@@ -15,7 +15,8 @@
     "test:unit": "npm run test:unit -w backend",
     "test:frontend": "npm test -w frontend",
     "prepare:models": "node scripts/prepare-models.mjs",
-    "test:models": "node scripts/check-voice-model.mjs"
+    "test:models": "node scripts/check-voice-model.mjs",
+    "load:check": "node scripts/load-check.mjs"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",
