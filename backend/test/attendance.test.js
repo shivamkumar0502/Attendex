@@ -65,6 +65,11 @@ test("Mongo-backed teacher/student workflow, authorization and session lifecycle
     "pending",
   );
   await student.post("/api/attendance").send({ lesson }).expect(200);
+  assert.equal(
+    (await student.get("/api/state")).body.classes[0].attendance.length,
+    1,
+    "retries must not create duplicate attendance rows",
+  );
   await outsider
     .post("/api/attendance")
     .send({ lesson, student: sid, status: "present" })
