@@ -1,18 +1,34 @@
-import AccountSecurity, { Recovery } from "./AccountSecurity.jsx";
-import { TrustedFaceEnrollment, GroupPhotoReview } from "./TrustedFace.jsx";
-import BiometricPanel from "./BiometricPanel.jsx";
-import React, { useEffect, useRef, useState } from "react";
+import React, { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { api, exportAttendance } from "./api.js";
-import VoiceRollCall from "./VoiceRollCall.jsx";
-import Marketing from "./Marketing.jsx";
 import {
   ShareClass,
   StudentDirectory,
-  DemoWorkspace,
 } from "./WorkspaceExtras.jsx";
 import AttendanceOverview from "./AttendanceOverview.jsx";
-import StudentSetup, { PhotoCapture } from "./MediaSetup.jsx";
 import "./style.css";
+
+// Keep the initial workspace bundle small. Camera, audio, biometric and account
+// flows are downloaded only when the user opens the feature that needs them.
+const AccountSecurity = lazy(() => import("./AccountSecurity.jsx"));
+const Recovery = lazy(() =>
+  import("./AccountSecurity.jsx").then((module) => ({ default: module.Recovery })),
+);
+const TrustedFaceEnrollment = lazy(() =>
+  import("./TrustedFace.jsx").then((module) => ({ default: module.TrustedFaceEnrollment })),
+);
+const GroupPhotoReview = lazy(() =>
+  import("./TrustedFace.jsx").then((module) => ({ default: module.GroupPhotoReview })),
+);
+const BiometricPanel = lazy(() => import("./BiometricPanel.jsx"));
+const VoiceRollCall = lazy(() => import("./VoiceRollCall.jsx"));
+const Marketing = lazy(() => import("./Marketing.jsx"));
+const DemoWorkspace = lazy(() =>
+  import("./WorkspaceExtras.jsx").then((module) => ({ default: module.DemoWorkspace })),
+);
+const StudentSetup = lazy(() => import("./MediaSetup.jsx"));
+const PhotoCapture = lazy(() =>
+  import("./MediaSetup.jsx").then((module) => ({ default: module.PhotoCapture })),
+);
 function Brand() {
   return (
     <div className="brand">
@@ -831,7 +847,9 @@ export function App() {
   }
   return (
     <>
-      {content}
+      <Suspense fallback={<div className="empty" role="status">Loading feature…</div>}>
+        {content}
+      </Suspense>
       {message && (
         <div id="notice" role="status" style={{ display: "block" }}>
           {message}
