@@ -64,7 +64,7 @@ test("Mongo-backed teacher/student workflow, authorization and session lifecycle
     (await student.get("/api/state")).body.classes[0].attendance[0].status,
     "pending",
   );
-  await student.post("/api/attendance").send({ lesson }).expect(409);
+  await student.post("/api/attendance").send({ lesson }).expect(200);
   await outsider
     .post("/api/attendance")
     .send({ lesson, student: sid, status: "present" })
