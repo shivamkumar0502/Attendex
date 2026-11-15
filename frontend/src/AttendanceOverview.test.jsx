@@ -25,9 +25,9 @@ describe("AttendanceOverview", () => {
 
     render(<AttendanceOverview classes={classes} />);
 
-    expect(screen.getByText("50%")).toBeTruthy();
-    expect(screen.getByText("1", { selector: ".overview-metric strong" })).toBeTruthy();
-    expect(screen.getByText("2", { selector: ".overview-metric strong" })).toBeTruthy();
+    expect(document.querySelector(".overview-metric-primary strong").textContent).toBe("50%");
+    expect(screen.getByText("Live sessions").parentElement.querySelector("strong").textContent).toBe("1");
+    expect(screen.getByText("Pending review").parentElement.querySelector("strong").textContent).toBe("2");
     expect(screen.getByText("Computer Science")).toBeTruthy();
     expect(screen.getByRole("progressbar", { name: "Confirmed attendance rate" }).getAttribute("aria-valuenow")).toBe("50");
   });
