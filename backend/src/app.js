@@ -301,13 +301,24 @@ export function createApp(db, config = {}) {
     const historyGroups = await lessons.aggregate([
       { $match: { classId: { $in: classIds } } },
       {
+        $setWindowFields: {
+          partitionBy: "$classId",
+          sortBy: { created: -1, _id: -1 },
+          output: { historyRank: { $documentNumber: {} } },
+        },
+      },
+      { $match: { historyRank: { $lte: 100 } } },
+      { $unset: "historyRank" },
+      { $sort: { classId: 1, created: -1, _id: -1 } },
+      {
         $group: {
           _id: "$classId",
           items: {
-            $topN: {
-              output: "$ROOT",
-              sortBy: { created: -1, _id: -1 },
-              n: 100,
+            $push: {
+              _id: "$_id",
+              classId: "$classId",
+              created: "$created",
+              active: "$active",
             },
           },
         },
