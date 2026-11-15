@@ -40,7 +40,7 @@ test("Mongo-backed teacher/student workflow, authorization and session lifecycle
     .post("/api/classes")
     .send({ name: "Computer Networks", section: "CSE A" })
     .expect(201);
-  let cl = (await teacher.get("/api/state")).body.classes[0];
+  let cl = (await teacher.get("/api/state").expect(200)).body.classes[0];
   await student
     .post("/api/join")
     .send({ code: cl.code.toLowerCase() })
