@@ -293,53 +293,81 @@ export function createApp(db, config = {}) {
     const enrolled = await classes
       .find(teacher ? { teacher: uid } : { members: uid })
       .toArray();
-    const out = await Promise.all(
-      enrolled.map(async (cl) => {
-        const roster = teacher
-          ? await users
-              .find(
-                { _id: { $in: cl.members } },
-                { projection: { name: 1, "setup.completed": 1 } },
-              )
-              .toArray()
-          : [];
-        const history = await lessons
+    if (!enrolled.length) return res.json({ user: publicUser(req.user), classes: [] });
+
+    // Fetch the bounded history, roster and attendance in batches rather than
+    // issuing multiple database round-trips for every classroom.
+    const classIds = enrolled.map((cl) => cl._id);
+    const historyEntries = await Promise.all(
+      enrolled.map(async (cl) => [
+        cl._id,
+        await lessons
           .find({ classId: cl._id })
           .sort({ created: -1, _id: -1 })
           .limit(100)
-          .toArray();
-        const records = await attendance
-          .find({
-            lesson: { $in: history.map((l) => l._id) },
-            ...(!teacher ? { student: uid } : {}),
-          })
-          .toArray();
-        return {
-          id: cl._id,
-          name: cl.name,
-          section: cl.section,
-          code: teacher ? cl.code : undefined,
-          studentCount: cl.members.length,
-          students: roster.map((s) => ({
-            id: s._id,
-            name: s.name,
-            setupCompleted: !!s.setup?.completed,
-          })),
-          historyLimited: history.length === 100,
-          lessons: history.map((l) => ({
-            id: l._id,
-            created: l.created,
-            active: l.active,
-          })),
-          attendance: records.map((a) => ({
-            lesson: a.lesson,
-            student: a.student,
-            status: a.status,
-            evidence: a.evidence || {},
-          })),
-        };
-      }),
+          .toArray(),
+      ]),
     );
+    const histories = new Map(historyEntries);
+    const allLessons = historyEntries.flatMap(([, history]) => history);
+    const lessonIds = allLessons.map((lesson) => lesson._id);
+    const memberIds = teacher
+      ? [...new Set(enrolled.flatMap((cl) => cl.members))]
+      : [];
+    const [roster, records] = await Promise.all([
+      teacher && memberIds.length
+        ? users
+            .find(
+              { _id: { $in: memberIds } },
+              { projection: { name: 1, "setup.completed": 1 } },
+            )
+            .toArray()
+        : Promise.resolve([]),
+      lessonIds.length
+        ? attendance
+            .find({
+              lesson: { $in: lessonIds },
+              ...(!teacher ? { student: uid } : {}),
+            })
+            .toArray()
+        : Promise.resolve([]),
+    ]);
+    const studentsById = new Map(roster.map((student) => [student._id, student]));
+    const attendanceByLesson = new Map();
+    for (const record of records) {
+      const list = attendanceByLesson.get(record.lesson) || [];
+      list.push(record);
+      attendanceByLesson.set(record.lesson, list);
+    }
+    const out = enrolled.map((cl) => {
+      const history = histories.get(cl._id) || [];
+      return {
+        id: cl._id,
+        name: cl.name,
+        section: cl.section,
+        code: teacher ? cl.code : undefined,
+        studentCount: cl.members.length,
+        students: teacher
+          ? cl.members.map((memberId) => studentsById.get(memberId)).filter(Boolean).map((student) => ({
+              id: student._id,
+              name: student.name,
+              setupCompleted: !!student.setup?.completed,
+            }))
+          : [],
+        historyLimited: history.length === 100,
+        lessons: history.map((lesson) => ({
+          id: lesson._id,
+          created: lesson.created,
+          active: lesson.active,
+        })),
+        attendance: history.flatMap((lesson) => attendanceByLesson.get(lesson._id) || []).map((record) => ({
+          lesson: record.lesson,
+          student: record.student,
+          status: record.status,
+          evidence: record.evidence || {},
+        })),
+      };
+    });
     res.json({ user: publicUser(req.user), classes: out });
   });
   app.post("/api/classes", async (req, res) => {
@@ -420,21 +448,36 @@ export function createApp(db, config = {}) {
         { $set: { status, updated: new Date() } },
         { upsert: true },
       );
-    else
-      await attendance.insertOne({
-        evidence: Object.fromEntries(
-          Object.entries(req.user.biometricSignals || {}).filter(
-            ([kind, value]) =>
-              ["face", "voice"].includes(kind) &&
-              value.at &&
-              Date.now() - new Date(value.at).getTime() < 300000,
-          ),
+    else {
+      // A repeated or retried check-in is safe: preserve the first pending
+      // record instead of returning a duplicate-key error to the student.
+      const evidence = Object.fromEntries(
+        Object.entries(req.user.biometricSignals || {}).filter(
+          ([kind, value]) =>
+            ["face", "voice"].includes(kind) &&
+            value.at &&
+            Date.now() - new Date(value.at).getTime() < 300000,
         ),
-        lesson: lesson._id,
-        student,
-        status,
-        updated: new Date(),
-      });
+      );
+      try {
+        await attendance.updateOne(
+          { lesson: lesson._id, student },
+          {
+            $setOnInsert: {
+              evidence,
+              lesson: lesson._id,
+              student,
+              status,
+              updated: new Date(),
+            },
+          },
+          { upsert: true },
+        );
+      } catch (error) {
+        // Concurrent retries can race on the unique lesson/student index.
+        if (error.code !== 11000) throw error;
+      }
+    }
     res.json({ ok: true });
   });
   app.use("/api", (req, res) => fail(res, 404, "API route not found"));
@@ -442,7 +485,21 @@ export function createApp(db, config = {}) {
     path.dirname(fileURLToPath(import.meta.url)),
     "../../frontend/dist",
   );
-  app.use(express.static(dist));
+  app.use(
+    express.static(dist, {
+      etag: true,
+      lastModified: true,
+      setHeaders(res, filePath) {
+        // Vite's hashed assets are immutable; the HTML entry point must
+        // revalidate so deployments never strand clients on an old bundle.
+        if (path.basename(filePath) === "index.html")
+          res.setHeader("Cache-Control", "no-cache");
+        else if (filePath.includes(`${path.sep}assets${path.sep}`))
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        else res.setHeader("Cache-Control", "public, max-age=3600");
+      },
+    }),
+  );
   app.get("/{*path}", (req, res) =>
     res.sendFile(path.join(dist, "index.html")),
   );
