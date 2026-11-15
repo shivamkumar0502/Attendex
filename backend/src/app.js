@@ -298,34 +298,18 @@ export function createApp(db, config = {}) {
     // Fetch the bounded history, roster and attendance in batches rather than
     // issuing multiple database round-trips for every classroom.
     const classIds = enrolled.map((cl) => cl._id);
-    const historyGroups = await lessons.aggregate([
-      { $match: { classId: { $in: classIds } } },
-      {
-        $setWindowFields: {
-          partitionBy: "$classId",
-          sortBy: { created: -1, _id: -1 },
-          output: { historyRank: { $documentNumber: {} } },
-        },
-      },
-      { $match: { historyRank: { $lte: 100 } } },
-      { $unset: "historyRank" },
-      { $sort: { classId: 1, created: -1, _id: -1 } },
-      {
-        $group: {
-          _id: "$classId",
-          items: {
-            $push: {
-              _id: "$_id",
-              classId: "$classId",
-              created: "$created",
-              active: "$active",
-            },
-          },
-        },
-      },
-    ]).toArray();
-    const histories = new Map(historyGroups.map((group) => [group._id, group.items]));
-    const allLessons = historyGroups.flatMap((group) => group.items);
+    const historyEntries = await Promise.all(
+      enrolled.map(async (cl) => [
+        cl._id,
+        await lessons
+          .find({ classId: cl._id })
+          .sort({ created: -1, _id: -1 })
+          .limit(100)
+          .toArray(),
+      ]),
+    );
+    const histories = new Map(historyEntries);
+    const allLessons = historyEntries.flatMap(([, history]) => history);
     const lessonIds = allLessons.map((lesson) => lesson._id);
     const memberIds = teacher
       ? [...new Set(enrolled.flatMap((cl) => cl.members))]
