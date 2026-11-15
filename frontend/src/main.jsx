@@ -6,11 +6,11 @@ import { api, exportAttendance } from "./api.js";
 import VoiceRollCall from "./VoiceRollCall.jsx";
 import Marketing from "./Marketing.jsx";
 import {
-  Insights,
   ShareClass,
   StudentDirectory,
   DemoWorkspace,
 } from "./WorkspaceExtras.jsx";
+import AttendanceOverview from "./AttendanceOverview.jsx";
 import StudentSetup, { PhotoCapture } from "./MediaSetup.jsx";
 import "./style.css";
 function Brand() {
@@ -177,7 +177,7 @@ function ClassModal({ teacher, onClose, onSave, initialCode = "" }) {
     <div className="modal" onKeyDown={keys}>
       <section
         ref={ref}
-        className="card"
+        className="card"        className="card"
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
@@ -356,8 +356,7 @@ function Classroom({ classroom: c, user, mutate, refresh, notify, busy }) {
           <summary>Face & voice enrollment / comparison</summary>
           <BiometricPanel />
         </details>
-      )}
-      {teacher && <PhotoCapture classroom />}
+      )}      {teacher && <PhotoCapture classroom />}
       {teacher && (
         <GroupPhotoReview classroom={c} lesson={lesson} onRefresh={refresh} />
       )}
@@ -536,8 +535,7 @@ export function App() {
       !window.location.hash.startsWith("#reset=") &&
       !window.location.hash.startsWith("#verify=")
     )
-      refresh();
-    return () => clearTimeout(timer.current);
+      refresh();    return () => clearTimeout(timer.current);
   }, []);
   async function mutate(path, data) {
     setBusy(true);
@@ -716,8 +714,7 @@ export function App() {
                   ? "Set the tone for a great day of learning."
                   : "Show up. Check in. Keep growing."}
               </p>
-            </div>
-            <button onClick={() => setModal(true)}>
+            </div>            <button onClick={() => setModal(true)}>
               {teacher ? "+ Create class" : "+ Join a class"}
             </button>
           </section>
@@ -730,7 +727,7 @@ export function App() {
               </div>
             ))}
           </section>
-          {teacher && view === "overview" && <Insights classes={classes} />}
+          {teacher && view === "overview" && <AttendanceOverview classes={classes} />}
           <div className="workspace">
             <section>
               <div className="row between">
