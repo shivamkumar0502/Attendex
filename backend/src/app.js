@@ -490,7 +490,21 @@ export function createApp(db, config = {}) {
     path.dirname(fileURLToPath(import.meta.url)),
     "../../frontend/dist",
   );
-  app.use(express.static(dist));
+  app.use(
+    express.static(dist, {
+      etag: true,
+      lastModified: true,
+      setHeaders(res, filePath) {
+        // Vite's hashed assets are immutable; the HTML entry point must
+        // revalidate so deployments never strand clients on an old bundle.
+        if (path.basename(filePath) === "index.html")
+          res.setHeader("Cache-Control", "no-cache");
+        else if (filePath.includes(`${path.sep}assets${path.sep}`))
+          res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+        else res.setHeader("Cache-Control", "public, max-age=3600");
+      },
+    }),
+  );
   app.get("/{*path}", (req, res) =>
     res.sendFile(path.join(dist, "index.html")),
   );
