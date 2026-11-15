@@ -147,7 +147,8 @@ small {
   box-shadow: 0 30px 70px #163e3420;
   color: white;
 }
-.preview p {  color: #b9c9c0;
+.preview p {
+  color: #b9c9c0;
 }
 .mini {
   background: #fff;
@@ -296,7 +297,8 @@ small {
 .classcard {
   padding: 22px;
   border-radius: 14px;
-  border: 1px solid #e4e8de;  margin-top: 14px;
+  border: 1px solid #e4e8de;
+  margin-top: 14px;
   background: white;
 }
 .classcard.selected {
@@ -445,7 +447,8 @@ a {
   }
   .sidebar .foot {
     display: none;
-  }  .sidebar .brand {
+  }
+  .sidebar .brand {
     font-size: 21px;
   }
   .main {
@@ -594,7 +597,8 @@ h3 {
   display: block;
   margin-bottom: 14px;
 }
-.marketing .landing {  max-width: 1380px;
+.marketing .landing {
+  max-width: 1380px;
 }
 .marketing-links {
   display: flex;
@@ -743,7 +747,8 @@ footer a {
 }
 .floating-note > span {
   float: left;
-  margin-right: 14px;  font-size: 22px;
+  margin-right: 14px;
+  font-size: 22px;
 }
 .value-strip {
   display: flex;
@@ -892,7 +897,8 @@ footer a {
 .share-dialog {
   max-height: 90vh;
   overflow: auto;
-}.qr-image {
+}
+.qr-image {
   display: block;
   width: 200px;
   height: 200px;
@@ -1041,7 +1047,8 @@ footer a {
   border-radius: 16px;
   padding: 24px;
   margin: 24px 0;
-  grid-column: 1/-1;}
+  grid-column: 1/-1;
+}
 .biometric-panel > p {
   font-size: 13px;
 }
@@ -1108,6 +1115,7 @@ footer a {
     padding: 16px;
   }
 }
+
 
 /* Reference-inspired attendance overview */
 .attendance-overview { margin: 22px 0 30px; }
