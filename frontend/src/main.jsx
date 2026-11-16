@@ -357,7 +357,7 @@ function History({ classroom: c, user }) {
       {lessons.length ? (
         <div className="roster">
           <table>
-            <thead><tr><th>Session</th><th>{teacher ? "Confirmed / roster" : "Status"}</th></tr></thead>
+            <thead><tr><th>Session</th><th>{teacher ? (status ? "Matches / roster" : "Confirmed / roster") : "Status"}</th></tr></thead>
             <tbody>
               {lessons.map((l) => {
                 const records = attendance.filter((a) => a.lesson === l.id);
