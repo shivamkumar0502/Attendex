@@ -214,8 +214,8 @@ test("attendance history paginates older sessions with class-scoped authorizatio
   }));
   await db.collection("lessons").insertMany(sessions);
   await db.collection("attendance").insertMany([
-    { lesson: sessions[129]._id, student: studentId, status: "present" },
-    { lesson: sessions[125]._id, student: studentId, status: "late" },
+    { lesson: sessions[120]._id, student: studentId, status: "present" },
+    { lesson: sessions[124]._id, student: studentId, status: "late" },
   ]);
 
   const initial = (await teacher.get("/api/state").expect(200)).body.classes[0];
