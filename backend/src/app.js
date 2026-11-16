@@ -31,14 +31,6 @@ const publicUser = (u) => ({
 const text = (v, max = 100) =>
   typeof v === "string" && v.trim().length <= max ? v.trim() : "";
 const validId = (v) => typeof v === "string" && /^[a-f0-9]{24}$/.test(v);
-const sessionMaxAgeMs =
-  Number.isFinite(config.sessionMaxAgeMs) && config.sessionMaxAgeMs > 0
-    ? config.sessionMaxAgeMs
-    : 8 * 60 * 60 * 1000;
-const isSessionActive = (lesson, now = Date.now()) =>
-  !!lesson.active &&
-  Number.isFinite(lesson.created) &&
-  now - lesson.created * 1000 < sessionMaxAgeMs;
 async function password(value, salt = randomBytes(16).toString("hex")) {
   return salt + ":" + (await scrypt(value, salt, 64)).toString("hex");
 }
@@ -46,6 +38,14 @@ function fail(res, status, error) {
   return res.status(status).json({ error });
 }
 export function createApp(db, config = {}) {
+  const sessionMaxAgeMs =
+    Number.isFinite(config.sessionMaxAgeMs) && config.sessionMaxAgeMs > 0
+      ? config.sessionMaxAgeMs
+      : 8 * 60 * 60 * 1000;
+  const isSessionActive = (lesson, now = Date.now()) =>
+    !!lesson.active &&
+    Number.isFinite(lesson.created) &&
+    now - lesson.created * 1000 < sessionMaxAgeMs;
   const app = express(),
     users = db.collection("users"),
     sessions = db.collection("sessions"),
