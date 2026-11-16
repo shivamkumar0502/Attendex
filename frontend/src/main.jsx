@@ -282,7 +282,7 @@ function History({ classroom: c, user }) {
                     </td>
                     <td>
                       {teacher
-                        ? `${records.filter((a) => ["present", "late"].includes(a.status)).length} / ${c.studentCount}`
+                        ? `${records.filter((a) => ["present", "late"].includes(a.status)).length} / ${Number.isInteger(l.rosterSize) ? l.rosterSize : "—"}`
                         : records[0]?.status || "unmarked"}
                     </td>
                   </tr>

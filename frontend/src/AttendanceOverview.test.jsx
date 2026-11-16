@@ -13,8 +13,8 @@ describe("AttendanceOverview", () => {
         section: "Year 2 · A",
         studentCount: 2,
         lessons: [
-          { id: "closed-1", active: false, created: 1_800_000_000 },
-          { id: "active-1", active: true, created: 1_800_000_100 },
+          { id: "closed-1", active: false, created: 1_800_000_000, rosterSize: 2 },
+          { id: "active-1", active: true, created: 1_800_000_100, rosterSize: 2 },
         ],
         attendance: [
           { lesson: "closed-1", student: "student-1", status: "present" },
@@ -33,11 +33,19 @@ describe("AttendanceOverview", () => {
     expect(screen.getByRole("progressbar", { name: "Confirmed attendance rate" }).getAttribute("aria-valuenow")).toBe("50");
   });
 
+  it("excludes legacy sessions without a roster snapshot from historical rates", () => {
+    const classes = [{ id: "legacy", name: "Legacy", studentCount: 10, lessons: [{ id: "old", active: false, created: 1_700_000_000 }], attendance: [{ lesson: "old", student: "s1", status: "present" }] }];
+    render(<AttendanceOverview classes={classes} />);
+    expect(screen.getByText("Historical roster snapshots unavailable")).toBeTruthy();
+    expect(screen.getByText(/older sessions lack a roster snapshot/)).toBeTruthy();
+    expect(screen.getByText("Legacy")).toBeTruthy();
+  });
+
   it("shows an empty state when no classes have closed sessions", () => {
     render(<AttendanceOverview classes={[]} />);
 
     expect(screen.getByText("No closed sessions yet")).toBeTruthy();
     expect(screen.getByText("Your activity will appear here")).toBeTruthy();
-    expect(screen.getByText("Not available")).toBeTruthy();
+    expect(screen.getAllByText("Not available")).toHaveLength(2);
   });
 });

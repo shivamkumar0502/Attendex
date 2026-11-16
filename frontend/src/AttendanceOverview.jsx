@@ -21,11 +21,16 @@ function getMetrics(classes) {
   const closedRecords = classes.flatMap((classroom) =>
     classroom.attendance.filter((record) => closedIds.has(record.lesson)),
   );
-  const expected = closedSessions.reduce(
-    (total, lesson) => total + lesson.classroom.studentCount,
+  const measurableSessions = closedSessions.filter(
+    (lesson) => Number.isInteger(lesson.rosterSize),
+  );
+  const expected = measurableSessions.reduce(
+    (total, lesson) => total + lesson.rosterSize,
     0,
   );
-  const confirmed = closedRecords.filter((record) =>
+  const measurableIds = new Set(measurableSessions.map((lesson) => lesson.id));
+  const measurableRecords = closedRecords.filter((record) => measurableIds.has(record.lesson));
+  const confirmed = measurableRecords.filter((record) =>
     ["present", "late"].includes(record.status),
   ).length;
   const pending = classes.reduce(
@@ -45,6 +50,7 @@ function getMetrics(classes) {
     pending,
     activeSessions,
     rate: expected ? Math.round((confirmed / expected) * 100) : null,
+    unmeasuredSessions: closedSessions.length - measurableSessions.length,
     recent: [...closedSessions]
       .sort((a, b) => b.created - a.created)
       .slice(0, 4),
@@ -75,7 +81,7 @@ export default function AttendanceOverview({ classes }) {
         <Metric
           label="Attendance rate"
           value={metrics.rate === null ? "—" : `${metrics.rate}%`}
-          detail={metrics.expected ? `${metrics.confirmed} confirmed of ${metrics.expected} expected` : "No closed sessions yet"}
+          detail={metrics.expected ? `${metrics.confirmed} confirmed of ${metrics.expected} expected` : metrics.unmeasuredSessions ? "Historical roster snapshots unavailable" : "No closed sessions yet"}
           tone="primary"
         />
         <Metric
@@ -123,7 +129,7 @@ export default function AttendanceOverview({ classes }) {
                       <span>{session.classroom.section || "General"} · {formatDate(session.created)}</span>
                     </div>
                     <span className="overview-session-result">
-                      {present}/{session.classroom.studentCount}
+                      {present}/{Number.isInteger(session.rosterSize) ? session.rosterSize : "—"}
                     </span>
                   </div>
                 );
@@ -140,7 +146,7 @@ export default function AttendanceOverview({ classes }) {
         <article className="overview-panel overview-completion">
           <span className="eyebrow">RECORD QUALITY</span>
           <h3>Keep attendance review clear</h3>
-          <p>Only teacher-confirmed present and late records contribute to the attendance rate. Pending and unmarked records are never silently counted as absent.</p>
+          <p>Only teacher-confirmed present and late records contribute to the attendance rate. New sessions save a roster snapshot so later enrollment changes do not rewrite history. Older sessions without a snapshot are excluded from the percentage.</p>
           <div className="overview-progress-label">
             <span>Confirmed attendance</span>
             <strong>{metrics.rate === null ? "Not available" : `${metrics.rate}%`}</strong>
@@ -155,7 +161,7 @@ export default function AttendanceOverview({ classes }) {
           >
             <span style={{ width: `${metrics.rate ?? 0}%` }} />
           </div>
-          <small>{metrics.pending} check-ins currently need review.</small>
+          <small>{metrics.pending} check-ins currently need review. {metrics.unmeasuredSessions ? `${metrics.unmeasuredSessions} older sessions lack a roster snapshot and are excluded.` : ""}</small>
         </article>
       </div>
     </section>

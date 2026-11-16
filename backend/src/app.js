@@ -359,6 +359,7 @@ export function createApp(db, config = {}) {
           id: lesson._id,
           created: lesson.created,
           active: lesson.active,
+          rosterSize: Number.isInteger(lesson.rosterSize) ? lesson.rosterSize : null,
         })),
         attendance: history.flatMap((lesson) => attendanceByLesson.get(lesson._id) || []).map((record) => ({
           lesson: record.lesson,
@@ -416,6 +417,7 @@ export function createApp(db, config = {}) {
       _id: id(),
       classId: cl._id,
       created: Math.floor(Date.now() / 1000),
+      rosterSize: cl.members.length,
       active: true,
     });
     res.status(201).json({ ok: true });
