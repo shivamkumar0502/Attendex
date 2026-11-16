@@ -52,6 +52,7 @@ test("Mongo-backed teacher/student workflow, authorization and session lifecycle
   cl = (await teacher.get("/api/state")).body.classes[0];
   assert.equal(cl.studentCount, 1);
   const lesson = cl.lessons[0].id;
+  assert.equal(cl.lessons[0].rosterSize, 1, "session must snapshot the enrolled roster");
   const studentState = (await student.get("/api/state")).body;
   assert.equal(studentState.classes[0].code, undefined);
   assert.deepEqual(studentState.classes[0].students, []);
