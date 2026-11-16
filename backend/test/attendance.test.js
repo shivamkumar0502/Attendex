@@ -290,4 +290,7 @@ test("attendance history filters by date range and status with student isolation
   await teacher
     .get(`/api/history?classId=${classroom.id}&status=unknown`)
     .expect(400);
+  await teacher
+    .get(`/api/history?classId=${classroom.id}&tzOffset=900`)
+    .expect(400);
 });
