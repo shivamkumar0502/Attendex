@@ -406,44 +406,66 @@ export function createApp(db, config = {}) {
     const student = req.user.role === "student" && cl.members.includes(req.user._id);
     if (!teacher && !student) return fail(res, 403, "Class access required");
 
-    const rawCursor = req.query.cursor;
-    let cursor;
-    try {
-      cursor = JSON.parse(Buffer.from(rawCursor || "", "base64url").toString("utf8"));
-    } catch {
-      return fail(res, 400, "Invalid history cursor");
-    }
-    if (
-      !cursor ||
-      !Number.isSafeInteger(cursor.created) ||
-      !validId(cursor.id)
-    ) return fail(res, 400, "Invalid history cursor");
+    const parseDate = (value, endOfDay = false) => {
+      if (value === undefined || value === "") return null;
+      if (typeof value !== "string" || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return NaN;
+      const date = new Date(value + "T00:00:00.000Z");
+      if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return NaN;
+      return Math.floor(date.getTime() / 1000) + (endOfDay ? 86400 : 0);
+    };
+    const from = parseDate(req.query.from);
+    const to = parseDate(req.query.to, true);
+    if (Number.isNaN(from) || Number.isNaN(to) || (from !== null && to !== null && from >= to))
+      return fail(res, 400, "Choose a valid date range");
+    const status = req.query.status || "";
+    if (status && !["pending", "present", "late", "absent"].includes(status))
+      return fail(res, 400, "Invalid attendance status");
 
+    let cursor = null;
+    if (req.query.cursor) {
+      try {
+        cursor = JSON.parse(Buffer.from(req.query.cursor, "base64url").toString("utf8"));
+      } catch {
+        return fail(res, 400, "Invalid history cursor");
+      }
+      if (!cursor || !Number.isSafeInteger(cursor.created) || !validId(cursor.id))
+        return fail(res, 400, "Invalid history cursor");
+    }
     const limitValue = Number(req.query.limit || 25);
-    const limit = Number.isInteger(limitValue)
-      ? Math.min(50, Math.max(1, limitValue))
-      : 25;
-    const page = await lessons.find({
-      classId,
-      $or: [
+    const limit = Number.isInteger(limitValue) ? Math.min(50, Math.max(1, limitValue)) : 25;
+    const match = { classId };
+    if (from !== null || to !== null) {
+      match.created = {};
+      if (from !== null) match.created.$gte = from;
+      if (to !== null) match.created.$lt = to;
+    }
+    if (cursor) {
+      match.$or = [
         { created: { $lt: cursor.created } },
         { created: cursor.created, _id: { $lt: cursor.id } },
-      ],
-    }).sort({ created: -1, _id: -1 }).limit(limit + 1).toArray();
+      ];
+    }
+    const recordMatch = { $expr: { $eq: ["$lesson", "$$lessonId"] } };
+    if (!teacher) recordMatch.student = req.user._id;
+    if (status) recordMatch.status = status;
+    const page = await lessons.aggregate([
+      { $match: match },
+      { $sort: { created: -1, _id: -1 } },
+      {
+        $lookup: {
+          from: "attendance",
+          let: { lessonId: "$_id" },
+          pipeline: [{ $match: recordMatch }],
+          as: "records",
+        },
+      },
+      ...(status ? [{ $match: { "records.0": { $exists: true } } }] : []),
+      { $limit: limit + 1 },
+    ]).toArray();
     const hasMore = page.length > limit;
     const history = page.slice(0, limit);
-    const lessonIds = history.map((lesson) => lesson._id);
-    const records = lessonIds.length
-      ? await attendance.find({
-          lesson: { $in: lessonIds },
-          ...(!teacher ? { student: req.user._id } : {}),
-        }).toArray()
-      : [];
     const next = hasMore && history.length
-      ? Buffer.from(JSON.stringify({
-          created: history.at(-1).created,
-          id: history.at(-1)._id,
-        })).toString("base64url")
+      ? Buffer.from(JSON.stringify({ created: history.at(-1).created, id: history.at(-1)._id })).toString("base64url")
       : null;
     res.json({
       lessons: history.map((lesson) => ({
@@ -452,12 +474,12 @@ export function createApp(db, config = {}) {
         active: isSessionActive(lesson),
         rosterSize: Number.isInteger(lesson.rosterSize) ? lesson.rosterSize : null,
       })),
-      attendance: records.map((record) => ({
+      attendance: history.flatMap((lesson) => lesson.records.map((record) => ({
         lesson: record.lesson,
         student: record.student,
         status: record.status,
         evidence: record.evidence || {},
-      })),
+      }))),
       hasMore,
       nextCursor: next,
     });
