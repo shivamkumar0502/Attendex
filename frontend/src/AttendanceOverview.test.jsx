@@ -13,8 +13,8 @@ describe("AttendanceOverview", () => {
         section: "Year 2 · A",
         studentCount: 2,
         lessons: [
-          { id: "closed-1", active: false, created: 1_800_000_000 },
-          { id: "active-1", active: true, created: 1_800_000_100 },
+          { id: "closed-1", active: false, created: 1_800_000_000, rosterSize: 2 },
+          { id: "active-1", active: true, created: 1_800_000_100, rosterSize: 2 },
         ],
         attendance: [
           { lesson: "closed-1", student: "student-1", status: "present" },
@@ -31,6 +31,13 @@ describe("AttendanceOverview", () => {
     expect(screen.getByText("Pending review").parentElement.querySelector("strong").textContent).toBe("2");
     expect(screen.getByText("Computer Science")).toBeTruthy();
     expect(screen.getByRole("progressbar", { name: "Confirmed attendance rate" }).getAttribute("aria-valuenow")).toBe("50");
+  });
+
+  it("excludes legacy sessions without a roster snapshot from historical rates", () => {
+    const classes = [{ id: "legacy", name: "Legacy", studentCount: 10, lessons: [{ id: "old", active: false, created: 1_700_000_000 }], attendance: [{ lesson: "old", student: "s1", status: "present" }] }];
+    render(<AttendanceOverview classes={classes} />);
+    expect(screen.getByText("No closed sessions yet")).toBeTruthy();
+    expect(screen.getByText(/older sessions lack a roster snapshot/)).toBeTruthy();
   });
 
   it("shows an empty state when no classes have closed sessions", () => {
