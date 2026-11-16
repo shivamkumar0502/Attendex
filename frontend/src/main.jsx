@@ -277,6 +277,7 @@ function History({ classroom: c, user }) {
     const params = new URLSearchParams({
       classId: c.id,
       limit: "25",
+      tzOffset: String(new Date().getTimezoneOffset()),
       ...(from ? { from } : {}),
       ...(to ? { to } : {}),
       ...(status ? { status } : {}),
@@ -296,6 +297,7 @@ function History({ classroom: c, user }) {
       classId: c.id,
       cursor: visibleCursor,
       limit: "25",
+      tzOffset: String(new Date().getTimezoneOffset()),
       ...(filtering && from ? { from } : {}),
       ...(filtering && to ? { to } : {}),
       ...(filtering && status ? { status } : {}),
