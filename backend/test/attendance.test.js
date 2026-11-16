@@ -250,3 +250,44 @@ test("attendance history paginates older sessions with class-scoped authorizatio
     .get(`/api/history?classId=${classroom.id}&cursor=invalid`)
     .expect(400);
 });
+
+
+test("attendance history filters by date range and status with student isolation", async () => {
+  const teacher = request.agent(app);
+  const student = request.agent(app);
+  await register(teacher, "FilterProfessor", "teacher");
+  await register(student, "FilterStudent", "student");
+  await teacher.post("/api/classes").send({ name: "Filter Class" }).expect(201);
+  const classroom = (await teacher.get("/api/state").expect(200)).body.classes[0];
+  await student.post("/api/join").send({ code: classroom.code }).expect(200);
+  const studentId = (await student.get("/api/state").expect(200)).body.user.id;
+  const now = Math.floor(Date.now() / 1000);
+  const lessons = [
+    { _id: "000000000000000000000101", classId: classroom.id, created: now - 3600, rosterSize: 1, active: false },
+    { _id: "000000000000000000000102", classId: classroom.id, created: now - 86400 * 3, rosterSize: 1, active: false },
+    { _id: "000000000000000000000103", classId: classroom.id, created: now - 86400 * 8, rosterSize: 1, active: false },
+  ];
+  await db.collection("lessons").insertMany(lessons);
+  await db.collection("attendance").insertMany([
+    { lesson: lessons[0]._id, student: studentId, status: "present" },
+    { lesson: lessons[1]._id, student: studentId, status: "late" },
+    { lesson: lessons[2]._id, student: studentId, status: "absent" },
+  ]);
+  const today = new Date(now * 1000).toISOString().slice(0, 10);
+  const weekAgo = new Date((now - 7 * 86400) * 1000).toISOString().slice(0, 10);
+  const present = await teacher
+    .get(`/api/history?classId=${classroom.id}&from=${weekAgo}&status=present`)
+    .expect(200);
+  assert.deepEqual(present.body.lessons.map((lesson) => lesson.id), [lessons[0]._id]);
+  assert.deepEqual(present.body.attendance.map((record) => record.status), ["present"]);
+  const studentPage = await student
+    .get(`/api/history?classId=${classroom.id}&from=${weekAgo}`)
+    .expect(200);
+  assert.ok(studentPage.body.attendance.every((record) => record.student === studentId));
+  await teacher
+    .get(`/api/history?classId=${classroom.id}&from=${today}&to=${weekAgo}`)
+    .expect(400);
+  await teacher
+    .get(`/api/history?classId=${classroom.id}&status=unknown`)
+    .expect(400);
+});
