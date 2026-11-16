@@ -36,8 +36,9 @@ describe("AttendanceOverview", () => {
   it("excludes legacy sessions without a roster snapshot from historical rates", () => {
     const classes = [{ id: "legacy", name: "Legacy", studentCount: 10, lessons: [{ id: "old", active: false, created: 1_700_000_000 }], attendance: [{ lesson: "old", student: "s1", status: "present" }] }];
     render(<AttendanceOverview classes={classes} />);
-    expect(screen.getByText("No closed sessions yet")).toBeTruthy();
+    expect(screen.getByText("Historical roster snapshots unavailable")).toBeTruthy();
     expect(screen.getByText(/older sessions lack a roster snapshot/)).toBeTruthy();
+    expect(screen.getByText("Legacy")).toBeTruthy();
   });
 
   it("shows an empty state when no classes have closed sessions", () => {
@@ -45,6 +46,6 @@ describe("AttendanceOverview", () => {
 
     expect(screen.getByText("No closed sessions yet")).toBeTruthy();
     expect(screen.getByText("Your activity will appear here")).toBeTruthy();
-    expect(screen.getByText("Not available")).toBeTruthy();
+    expect(screen.getAllByText("Not available")).toHaveLength(2);
   });
 });
