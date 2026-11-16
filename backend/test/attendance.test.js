@@ -162,3 +162,30 @@ test("duplicate registration returns a clear conflict and keeps email case-insen
     1,
   );
 });
+
+test("abandoned attendance sessions expire and no longer block a new session", async () => {
+  const teacher = request.agent(app);
+  const student = request.agent(app);
+  await register(teacher, "ExpiryProfessor", "teacher");
+  await register(student, "ExpiryStudent", "student");
+
+  await teacher.post("/api/classes").send({ name: "Expiry Test" }).expect(201);
+  const cl = (await teacher.get("/api/state").expect(200)).body.classes[0];
+  await student.post("/api/join").send({ code: cl.code }).expect(200);
+  await teacher.post("/api/lessons").send({ classId: cl.id }).expect(201);
+
+  let state = (await teacher.get("/api/state").expect(200)).body;
+  const abandoned = state.classes[0].lessons[0];
+  await db.collection("lessons").updateOne(
+    { _id: abandoned.id },
+    { $set: { created: Math.floor(Date.now() / 1000) - 9 * 60 * 60 } },
+  );
+
+  await student.post("/api/attendance").send({ lesson: abandoned.id }).expect(403);
+  state = (await teacher.get("/api/state").expect(200)).body;
+  assert.equal(state.classes[0].lessons[0].active, false);
+  await teacher.post("/api/lessons").send({ classId: cl.id }).expect(201);
+  state = (await teacher.get("/api/state").expect(200)).body;
+  assert.equal(state.classes[0].lessons[0].active, true);
+  assert.equal(state.classes[0].lessons[1].active, false);
+});
