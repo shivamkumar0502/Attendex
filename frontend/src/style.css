@@ -1311,3 +1311,19 @@ footer { color: #667085; border-color: #e4e7ee; }
   .overview-metrics { grid-template-columns: 1fr; }
   .top .row button { font-size: 12px; padding: 9px 11px; }
 }
+
+.history-more {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+.history-more [role="status"] {
+  color: #b42318;
+  font-size: 12px;
+}
+.history-more button:disabled {
+  opacity: .6;
+  cursor: wait;
+}
