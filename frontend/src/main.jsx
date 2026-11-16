@@ -365,7 +365,7 @@ function History({ classroom: c, user }) {
                   <tr key={l.id}>
                     <td>{new Date(l.created * 1000).toLocaleString()}{l.active ? " · Open" : ""}</td>
                     <td>{teacher
-                      ? `${records.filter((a) => ["present", "late"].includes(a.status)).length} / ${Number.isInteger(l.rosterSize) ? l.rosterSize : "—"}`
+                      ? `${status ? records.length + " " + status : records.filter((a) => ["present", "late"].includes(a.status)).length} / ${Number.isInteger(l.rosterSize) ? l.rosterSize : "—"}`
                       : records[0]?.status || "unmarked"}</td>
                   </tr>
                 );
