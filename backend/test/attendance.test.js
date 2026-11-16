@@ -131,3 +131,34 @@ test("rejects cross-origin mutations, invalid bodies and injection-shaped input"
     .send("{")
     .expect(400);
 });
+
+test("duplicate registration returns a clear conflict and keeps email case-insensitive", async () => {
+  await request(app)
+    .post("/api/register")
+    .send({
+      name: "First Account",
+      role: "student",
+      email: "duplicate@test.edu",
+      password: "test-password-123",
+    })
+    .expect(200);
+
+  const duplicate = await request(app)
+    .post("/api/register")
+    .send({
+      name: "Second Account",
+      role: "teacher",
+      email: "DUPLICATE@Test.edu",
+      password: "another-password-123",
+    })
+    .expect(409);
+
+  assert.equal(
+    duplicate.body.error,
+    "An account with this email already exists.",
+  );
+  assert.equal(
+    await db.collection("users").countDocuments({ email: "duplicate@test.edu" }),
+    1,
+  );
+});

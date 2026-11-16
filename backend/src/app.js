@@ -166,6 +166,10 @@ export function createApp(db, config = {}) {
         role = req.body.role;
       if (!name || !["teacher", "student"].includes(role))
         return fail(res, 400, "Enter your name and role.");
+      // Give duplicate sign-ups a stable client error instead of allowing
+      // the unique-index exception to become a generic server response.
+      if (await users.findOne({ email }, { projection: { _id: 1 } }))
+        return fail(res, 409, "An account with this email already exists.");
       user = {
         _id: id(),
         name,
@@ -175,7 +179,15 @@ export function createApp(db, config = {}) {
         teacherApproved: false,
         createdAt: new Date(),
       };
-      await users.insertOne(user);
+      try {
+        await users.insertOne(user);
+      } catch (error) {
+        // The unique email index remains the source of truth when two
+        // registrations race after the preflight lookup.
+        if (error.code === 11000)
+          return fail(res, 409, "An account with this email already exists.");
+        throw error;
+      }
     } else user = await users.findOne({ email });
     if (!user) {
       await password(p, "00000000000000000000000000000000");
