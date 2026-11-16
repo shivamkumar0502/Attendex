@@ -38,6 +38,14 @@ function fail(res, status, error) {
   return res.status(status).json({ error });
 }
 export function createApp(db, config = {}) {
+  const sessionMaxAgeMs =
+    Number.isFinite(config.sessionMaxAgeMs) && config.sessionMaxAgeMs > 0
+      ? config.sessionMaxAgeMs
+      : 8 * 60 * 60 * 1000;
+  const isSessionActive = (lesson, now = Date.now()) =>
+    !!lesson.active &&
+    Number.isFinite(lesson.created) &&
+    now - lesson.created * 1000 < sessionMaxAgeMs;
   const app = express(),
     users = db.collection("users"),
     sessions = db.collection("sessions"),
@@ -370,7 +378,7 @@ export function createApp(db, config = {}) {
         lessons: history.map((lesson) => ({
           id: lesson._id,
           created: lesson.created,
-          active: lesson.active,
+          active: isSessionActive(lesson),
           rosterSize: Number.isInteger(lesson.rosterSize) ? lesson.rosterSize : null,
         })),
         attendance: history.flatMap((lesson) => attendanceByLesson.get(lesson._id) || []).map((record) => ({
@@ -418,12 +426,22 @@ export function createApp(db, config = {}) {
       teacher: req.user._id,
     });
     if (!cl) return fail(res, 404, "Class not found");
-    // A unique partial index guarantees at most one active session per class.
-    if (await lessons.findOne({ classId: cl._id, active: true }))
+    // Expire abandoned sessions before enforcing the one-active-session rule.
+    // The partial unique index remains the concurrency-safe final guard.
+    const activeLesson = await lessons.findOne({
+      classId: cl._id,
+      active: true,
+    });
+    if (activeLesson && isSessionActive(activeLesson))
       return fail(
         res,
         409,
         "Close the active session before starting another.",
+      );
+    if (activeLesson)
+      await lessons.updateOne(
+        { _id: activeLesson._id, active: true },
+        { $set: { active: false, closedReason: "expired", closedAt: new Date() } },
       );
     await lessons.insertOne({
       _id: id(),
@@ -447,10 +465,17 @@ export function createApp(db, config = {}) {
       return res.json({ ok: true });
     }
     const student = owner ? req.body.student : req.user._id;
+    if (!owner && !isSessionActive(lesson)) {
+      await lessons.updateOne(
+        { _id: lesson._id, active: true },
+        { $set: { active: false, closedReason: "expired", closedAt: new Date() } },
+      );
+      return fail(res, 403, "This attendance session has expired.");
+    }
     if (
       !validId(student) ||
       !cl.members.includes(student) ||
-      (!owner && (req.user.role !== "student" || !lesson.active))
+      (!owner && req.user.role !== "student")
     )
       return fail(res, 403, "Check-in not permitted");
     const status = owner ? req.body.status : "pending";
