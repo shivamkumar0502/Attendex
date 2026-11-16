@@ -406,6 +406,10 @@ export function createApp(db, config = {}) {
     const student = req.user.role === "student" && cl.members.includes(req.user._id);
     if (!teacher && !student) return fail(res, 403, "Class access required");
 
+    const offset = req.query.tzOffset === undefined ? 0 : Number(req.query.tzOffset);
+    if (!Number.isInteger(offset) || Math.abs(offset) > 840)
+      return fail(res, 400, "Invalid time zone offset");
+    const localOffsetSeconds = offset * 60;
     const parseDate = (value, endOfDay = false) => {
       if (value === undefined || value === "") return null;
       if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return NaN;
@@ -413,14 +417,10 @@ export function createApp(db, config = {}) {
       if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return NaN;
       return Math.floor(date.getTime() / 1000) + localOffsetSeconds + (endOfDay ? 86400 : 0);
     };
-    const offset = req.query.tzOffset === undefined ? 0 : Number(req.query.tzOffset);
-    if (!Number.isInteger(offset) || Math.abs(offset) > 840)
-      return fail(res, 400, "Invalid time zone offset");
     const from = parseDate(req.query.from);
     const to = parseDate(req.query.to, true);
     if (Number.isNaN(from) || Number.isNaN(to) || (from !== null && to !== null && from >= to))
       return fail(res, 400, "Choose a valid date range");
-    const localOffsetSeconds = offset * 60;
     const status = req.query.status || "";
     if (status && !["pending", "present", "late", "absent"].includes(status))
       return fail(res, 400, "Invalid attendance status");
