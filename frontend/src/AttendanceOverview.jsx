@@ -81,7 +81,7 @@ export default function AttendanceOverview({ classes }) {
         <Metric
           label="Attendance rate"
           value={metrics.rate === null ? "—" : `${metrics.rate}%`}
-          detail={metrics.expected ? `${metrics.confirmed} confirmed of ${metrics.expected} expected` : "No closed sessions yet"}
+          detail={metrics.expected ? `${metrics.confirmed} confirmed of ${metrics.expected} expected` : metrics.unmeasuredSessions ? "Historical roster snapshots unavailable" : "No closed sessions yet"}
           tone="primary"
         />
         <Metric
