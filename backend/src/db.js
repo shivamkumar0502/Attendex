@@ -55,6 +55,7 @@ export async function connectDatabase(uri, name) {
       db
         .collection("attendance")
         .createIndex({ lesson: 1, student: 1 }, { unique: true }),
+      db.collection("attendance").createIndex({ lesson: 1, status: 1, student: 1 }),
     ]);
     return { client, db };
   } catch (e) {
