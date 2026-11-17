@@ -252,24 +252,71 @@ function History({ classroom: c, user }) {
   const [olderAttendance, setOlderAttendance] = useState([]);
   const [cursor, setCursor] = useState(c.historyCursor);
   const [hasMore, setHasMore] = useState(!!c.historyLimited);
+  const [filteredPage, setFilteredPage] = useState(null);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [status, setStatus] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const lessons = [...c.lessons, ...olderLessons];
-  const attendance = [...c.attendance, ...olderAttendance];
+  const filtering = !!(from || to || status);
+  const lessons = filteredPage ? filteredPage.lessons : [...c.lessons, ...olderLessons];
+  const attendance = filteredPage ? filteredPage.attendance : [...c.attendance, ...olderAttendance];
   const exportData = { ...c, lessons, attendance };
+  const visibleHasMore = filteredPage ? filteredPage.hasMore : hasMore;
+  const visibleCursor = filteredPage ? filteredPage.nextCursor : cursor;
 
-  async function loadOlder() {
-    if (!cursor || loading) return;
+  useEffect(() => {
+    if (!filtering) {
+      setFilteredPage(null);
+      setError("");
+      return;
+    }
+    let cancelled = false;
     setLoading(true);
     setError("");
+    const params = new URLSearchParams({
+      classId: c.id,
+      limit: "25",
+      tzOffset: String(new Date().getTimezoneOffset()),
+      ...(from ? { from } : {}),
+      ...(to ? { to } : {}),
+      ...(status ? { status } : {}),
+    });
+    api("history?" + params.toString())
+      .then((page) => { if (!cancelled) setFilteredPage(page); })
+      .catch((e) => { if (!cancelled) setError(e.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [c.id, from, to, status, filtering]);
+
+  async function loadOlder() {
+    if (!visibleCursor || loading) return;
+    setLoading(true);
+    setError("");
+    const params = new URLSearchParams({
+      classId: c.id,
+      cursor: visibleCursor,
+      limit: "25",
+      tzOffset: String(new Date().getTimezoneOffset()),
+      ...(filtering && from ? { from } : {}),
+      ...(filtering && to ? { to } : {}),
+      ...(filtering && status ? { status } : {}),
+    });
     try {
-      const page = await api(
-        `history?classId=${encodeURIComponent(c.id)}&cursor=${encodeURIComponent(cursor)}&limit=25`,
-      );
-      setOlderLessons((items) => [...items, ...page.lessons]);
-      setOlderAttendance((items) => [...items, ...page.attendance]);
-      setCursor(page.nextCursor);
-      setHasMore(page.hasMore);
+      const page = await api("history?" + params.toString());
+      if (filtering) {
+        setFilteredPage((current) => ({
+          lessons: [...(current?.lessons || []), ...page.lessons],
+          attendance: [...(current?.attendance || []), ...page.attendance],
+          hasMore: page.hasMore,
+          nextCursor: page.nextCursor,
+        }));
+      } else {
+        setOlderLessons((items) => [...items, ...page.lessons]);
+        setOlderAttendance((items) => [...items, ...page.attendance]);
+        setCursor(page.nextCursor);
+        setHasMore(page.hasMore);
+      }
     } catch (e) {
       setError(e.message);
     } finally {
@@ -281,38 +328,47 @@ function History({ classroom: c, user }) {
     <>
       <div className="row between">
         <h3>Attendance history</h3>
-        <button className="ghost" onClick={() => exportAttendance(exportData, user)}>
-          Export CSV ↓
-        </button>
+        <button className="ghost" onClick={() => exportAttendance(exportData, user)}>Export CSV ↓</button>
       </div>
-      {c.historyLimited && (
-        <p className="hint">
-          Showing the latest sessions first. Load older records to include them in your CSV export.
-        </p>
+      <div className="history-filters" aria-label="Filter attendance history">
+        <label>
+          From
+          <input aria-label="From date" type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} />
+        </label>
+        <label>
+          To
+          <input aria-label="To date" type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} />
+        </label>
+        <label>
+          Status
+          <select aria-label="Attendance status" value={status} onChange={(e) => setStatus(e.target.value)}>
+            <option value="">All statuses</option>
+            <option value="pending">Pending</option>
+            <option value="present">Present</option>
+            <option value="late">Late</option>
+            <option value="absent">Absent</option>
+          </select>
+        </label>
+        {filtering && <button className="textbtn" type="button" onClick={() => { setFrom(""); setTo(""); setStatus(""); }}>Clear filters</button>}
+      </div>
+      {filtering && <p className="hint">Filtered results are paginated. CSV export includes the results currently loaded.</p>}
+      {c.historyLimited && !filtering && (
+        <p className="hint">Showing the latest sessions first. Load older records to include them in your CSV export.</p>
       )}
+      {loading && !lessons.length && <p role="status" className="hint">Searching attendance history…</p>}
       {lessons.length ? (
         <div className="roster">
           <table>
-            <thead>
-              <tr>
-                <th>Session</th>
-                <th>{teacher ? "Confirmed / roster" : "Status"}</th>
-              </tr>
-            </thead>
+            <thead><tr><th>Session</th><th>{teacher ? (status ? "Matches / roster" : "Confirmed / roster") : "Status"}</th></tr></thead>
             <tbody>
               {lessons.map((l) => {
                 const records = attendance.filter((a) => a.lesson === l.id);
                 return (
                   <tr key={l.id}>
-                    <td>
-                      {new Date(l.created * 1000).toLocaleString()}
-                      {l.active ? " · Open" : ""}
-                    </td>
-                    <td>
-                      {teacher
-                        ? `${records.filter((a) => ["present", "late"].includes(a.status)).length} / ${Number.isInteger(l.rosterSize) ? l.rosterSize : "—"}`
-                        : records[0]?.status || "unmarked"}
-                    </td>
+                    <td>{new Date(l.created * 1000).toLocaleString()}{l.active ? " · Open" : ""}</td>
+                    <td>{teacher
+                      ? `${status ? records.length + " " + status : records.filter((a) => ["present", "late"].includes(a.status)).length} / ${Number.isInteger(l.rosterSize) ? l.rosterSize : "—"}`
+                      : records[0]?.status || "unmarked"}</td>
                   </tr>
                 );
               })}
@@ -320,18 +376,19 @@ function History({ classroom: c, user }) {
           </table>
         </div>
       ) : (
-        <Empty title="A fresh start">
-          Attendance records will appear after your first session.
+        <Empty title={filtering ? "No matching sessions" : "A fresh start"}>
+          {filtering ? "Try a wider date range or another attendance status." : "Attendance records will appear after your first session."}
         </Empty>
       )}
-      {hasMore && (
+      {visibleHasMore && (
         <div className="history-more">
-          <button className="ghost" onClick={loadOlder} disabled={loading || !cursor}>
-            {loading ? "Loading older sessions…" : "Load 25 older sessions"}
+          <button className="ghost" onClick={loadOlder} disabled={loading || !visibleCursor}>
+            {loading ? "Loading…" : "Load 25 older sessions"}
           </button>
           <span role="status">{error}</span>
         </div>
       )}
+      {!visibleHasMore && error && <p role="alert">{error}</p>}
     </>
   );
 }

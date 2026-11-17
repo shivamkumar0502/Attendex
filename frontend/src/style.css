@@ -1327,3 +1327,54 @@ footer { color: #667085; border-color: #e4e7ee; }
   opacity: .6;
   cursor: wait;
 }
+
+
+.history-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
+  align-items: end;
+  gap: 12px;
+  margin: 18px 0;
+  padding: 16px;
+  border: 1px solid #e2e8e1;
+  border-radius: 14px;
+  background: #fbfcf9;
+}
+.history-filters label {
+  min-width: 0;
+  margin: 0;
+  color: #53665d;
+  font-size: 12px;
+  font-weight: 700;
+}
+.history-filters input,
+.history-filters select {
+  display: block;
+  margin-top: 7px;
+  min-height: 44px;
+}
+.history-filters .textbtn {
+  white-space: nowrap;
+  padding: 10px 12px;
+}
+@media (max-width: 680px) {
+  .history-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 12px;
+  }
+  .history-filters label:last-of-type {
+    grid-column: 1 / -1;
+  }
+  .history-filters .textbtn {
+    justify-self: start;
+  }
+}
+@media (max-width: 380px) {
+  .history-filters {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .history-filters label:last-of-type {
+    grid-column: auto;
+  }
+}
