@@ -45,7 +45,7 @@ export async function connectDatabase(uri, name) {
       db.collection("classes").createIndex({ code: 1 }, { unique: true }),
       db.collection("classes").createIndex({ teacher: 1 }),
       db.collection("classes").createIndex({ members: 1 }),
-      db.collection("lessons").createIndex({ classId: 1, created: -1 }),
+      db.collection("lessons").createIndex({ classId: 1, created: -1, _id: -1 }),
       db
         .collection("lessons")
         .createIndex(

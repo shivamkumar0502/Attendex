@@ -375,6 +375,12 @@ export function createApp(db, config = {}) {
             }))
           : [],
         historyLimited: history.length === 100,
+        historyCursor: history.length === 100
+          ? Buffer.from(JSON.stringify({
+              created: history.at(-1).created,
+              id: history.at(-1)._id,
+            })).toString("base64url")
+          : null,
         lessons: history.map((lesson) => ({
           id: lesson._id,
           created: lesson.created,
@@ -390,6 +396,71 @@ export function createApp(db, config = {}) {
       };
     });
     res.json({ user: publicUser(req.user), classes: out });
+  });
+  app.get("/api/history", async (req, res) => {
+    const classId = req.query.classId;
+    if (!validId(classId)) return fail(res, 400, "Invalid class");
+    const cl = await classes.findOne({ _id: classId });
+    if (!cl) return fail(res, 404, "Class not found");
+    const teacher = req.user.role === "teacher" && cl.teacher === req.user._id;
+    const student = req.user.role === "student" && cl.members.includes(req.user._id);
+    if (!teacher && !student) return fail(res, 403, "Class access required");
+
+    const rawCursor = req.query.cursor;
+    let cursor;
+    try {
+      cursor = JSON.parse(Buffer.from(rawCursor || "", "base64url").toString("utf8"));
+    } catch {
+      return fail(res, 400, "Invalid history cursor");
+    }
+    if (
+      !cursor ||
+      !Number.isSafeInteger(cursor.created) ||
+      !validId(cursor.id)
+    ) return fail(res, 400, "Invalid history cursor");
+
+    const limitValue = Number(req.query.limit || 25);
+    const limit = Number.isInteger(limitValue)
+      ? Math.min(50, Math.max(1, limitValue))
+      : 25;
+    const page = await lessons.find({
+      classId,
+      $or: [
+        { created: { $lt: cursor.created } },
+        { created: cursor.created, _id: { $lt: cursor.id } },
+      ],
+    }).sort({ created: -1, _id: -1 }).limit(limit + 1).toArray();
+    const hasMore = page.length > limit;
+    const history = page.slice(0, limit);
+    const lessonIds = history.map((lesson) => lesson._id);
+    const records = lessonIds.length
+      ? await attendance.find({
+          lesson: { $in: lessonIds },
+          ...(!teacher ? { student: req.user._id } : {}),
+        }).toArray()
+      : [];
+    const next = hasMore && history.length
+      ? Buffer.from(JSON.stringify({
+          created: history.at(-1).created,
+          id: history.at(-1)._id,
+        })).toString("base64url")
+      : null;
+    res.json({
+      lessons: history.map((lesson) => ({
+        id: lesson._id,
+        created: lesson.created,
+        active: isSessionActive(lesson),
+        rosterSize: Number.isInteger(lesson.rosterSize) ? lesson.rosterSize : null,
+      })),
+      attendance: records.map((record) => ({
+        lesson: record.lesson,
+        student: record.student,
+        status: record.status,
+        evidence: record.evidence || {},
+      })),
+      hasMore,
+      nextCursor: next,
+    });
   });
   app.post("/api/classes", async (req, res) => {
     if (req.user.role !== "teacher")

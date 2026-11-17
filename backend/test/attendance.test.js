@@ -189,3 +189,64 @@ test("abandoned attendance sessions expire and no longer block a new session", a
   assert.equal(state.classes[0].lessons[0].active, true);
   assert.equal(state.classes[0].lessons[1].active, false);
 });
+
+
+test("attendance history paginates older sessions with class-scoped authorization", async () => {
+  const teacher = request.agent(app);
+  const student = request.agent(app);
+  const outsider = request.agent(app);
+  await register(teacher, "HistoryProfessor", "teacher");
+  await register(student, "HistoryStudent", "student");
+  await register(outsider, "HistoryOutsider", "teacher");
+
+  await teacher.post("/api/classes").send({ name: "History Class" }).expect(201);
+  const classroom = (await teacher.get("/api/state").expect(200)).body.classes[0];
+  await student.post("/api/join").send({ code: classroom.code }).expect(200);
+  const studentId = (await student.get("/api/state").expect(200)).body.user.id;
+
+  const now = Math.floor(Date.now() / 1000);
+  const sessions = Array.from({ length: 130 }, (_, index) => ({
+    _id: (index + 1).toString(16).padStart(24, "0"),
+    classId: classroom.id,
+    created: now - index,
+    rosterSize: 1,
+    active: false,
+  }));
+  await db.collection("lessons").insertMany(sessions);
+  await db.collection("attendance").insertMany([
+    { lesson: sessions[120]._id, student: studentId, status: "present" },
+    { lesson: sessions[124]._id, student: studentId, status: "late" },
+  ]);
+
+  const initial = (await teacher.get("/api/state").expect(200)).body.classes[0];
+  assert.equal(initial.lessons.length, 100);
+  assert.ok(initial.historyCursor);
+
+  const first = await teacher
+    .get(`/api/history?classId=${classroom.id}&cursor=${encodeURIComponent(initial.historyCursor)}&limit=25`)
+    .expect(200);
+  assert.equal(first.body.lessons.length, 25);
+  assert.equal(first.body.hasMore, true);
+  assert.deepEqual(first.body.attendance.map((row) => row.status), ["present", "late"]);
+  assert.equal(first.body.lessons[0].id, sessions[100]._id);
+
+  const second = await teacher
+    .get(`/api/history?classId=${classroom.id}&cursor=${encodeURIComponent(first.body.nextCursor)}&limit=25`)
+    .expect(200);
+  assert.equal(second.body.lessons.length, 5);
+  assert.equal(second.body.hasMore, false);
+  assert.equal(second.body.nextCursor, null);
+
+  const studentPage = await student
+    .get(`/api/history?classId=${classroom.id}&cursor=${encodeURIComponent(initial.historyCursor)}&limit=25`)
+    .expect(200);
+  assert.equal(studentPage.body.attendance.length, 2);
+  assert.ok(studentPage.body.attendance.every((row) => row.student === studentId));
+
+  await outsider
+    .get(`/api/history?classId=${classroom.id}&cursor=${encodeURIComponent(initial.historyCursor)}`)
+    .expect(403);
+  await teacher
+    .get(`/api/history?classId=${classroom.id}&cursor=invalid`)
+    .expect(400);
+});

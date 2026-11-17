@@ -248,21 +248,49 @@ function ClassModal({ teacher, onClose, onSave, initialCode = "" }) {
 }
 function History({ classroom: c, user }) {
   const teacher = user.role === "teacher";
+  const [olderLessons, setOlderLessons] = useState([]);
+  const [olderAttendance, setOlderAttendance] = useState([]);
+  const [cursor, setCursor] = useState(c.historyCursor);
+  const [hasMore, setHasMore] = useState(!!c.historyLimited);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const lessons = [...c.lessons, ...olderLessons];
+  const attendance = [...c.attendance, ...olderAttendance];
+  const exportData = { ...c, lessons, attendance };
+
+  async function loadOlder() {
+    if (!cursor || loading) return;
+    setLoading(true);
+    setError("");
+    try {
+      const page = await api(
+        `history?classId=${encodeURIComponent(c.id)}&cursor=${encodeURIComponent(cursor)}&limit=25`,
+      );
+      setOlderLessons((items) => [...items, ...page.lessons]);
+      setOlderAttendance((items) => [...items, ...page.attendance]);
+      setCursor(page.nextCursor);
+      setHasMore(page.hasMore);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   return (
     <>
       <div className="row between">
         <h3>Attendance history</h3>
-        <button className="ghost" onClick={() => exportAttendance(c, user)}>
+        <button className="ghost" onClick={() => exportAttendance(exportData, user)}>
           Export CSV ↓
         </button>
       </div>
       {c.historyLimited && (
         <p className="hint">
-          Showing the latest 100 sessions. CSV exports on this screen include
-          only the visible history.
+          Showing the latest sessions first. Load older records to include them in your CSV export.
         </p>
       )}
-      {c.lessons.length ? (
+      {lessons.length ? (
         <div className="roster">
           <table>
             <thead>
@@ -272,8 +300,8 @@ function History({ classroom: c, user }) {
               </tr>
             </thead>
             <tbody>
-              {c.lessons.map((l) => {
-                const records = c.attendance.filter((a) => a.lesson === l.id);
+              {lessons.map((l) => {
+                const records = attendance.filter((a) => a.lesson === l.id);
                 return (
                   <tr key={l.id}>
                     <td>
@@ -295,6 +323,14 @@ function History({ classroom: c, user }) {
         <Empty title="A fresh start">
           Attendance records will appear after your first session.
         </Empty>
+      )}
+      {hasMore && (
+        <div className="history-more">
+          <button className="ghost" onClick={loadOlder} disabled={loading || !cursor}>
+            {loading ? "Loading older sessions…" : "Load 25 older sessions"}
+          </button>
+          <span role="status">{error}</span>
+        </div>
       )}
     </>
   );
